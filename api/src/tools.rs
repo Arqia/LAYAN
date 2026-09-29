@@ -151,6 +151,29 @@ pub fn definitions() -> Value {
     ])
 }
 
+/// Tool per layanan. Alur yang sedang berjalan tidak pernah butuh tool layanan lain.
+const GROUPS: [&[&str]; 4] = [
+    &["getStudentProfile", "requestLetterDetails", "requestAttachment", "checkLetterRequirements", "generateLetterDraft", "submitForApproval"],
+    &["searchKnowledgeBase", "answerWithCitation", "createTicket"],
+    &["findRooms", "holdRoom"],
+    &["reportDamage"],
+];
+
+/// Tool yang dikirim ke LLM. Setelah pesan mahasiswa, semua tool (LLM perlu memilih layanan).
+/// Saat melanjutkan alur (pesan terakhir hasil tool), cukup tool layanan itu: definisi tool
+/// adalah bagian terbesar prompt dan ikut terkirim di setiap panggilan.
+pub fn definitions_for(transcript: &[Value]) -> Value {
+    let all = definitions();
+    let Some(call_id) = transcript.last().filter(|m| m["role"] == "tool").and_then(|m| m["tool_call_id"].as_str()) else {
+        return all;
+    };
+    let name = transcript.iter().rev().filter_map(|m| m["tool_calls"].as_array()).flatten().find(|c| c["id"] == call_id).and_then(|c| c["function"]["name"].as_str());
+    let Some(group) = name.and_then(|n| GROUPS.iter().find(|g| g.contains(&n))) else {
+        return all;
+    };
+    all.as_array().unwrap().iter().filter(|d| d["function"]["name"].as_str().is_some_and(|n| group.contains(&n))).cloned().collect()
+}
+
 /// Tool terakhir sebuah alur. Semuanya sudah menampilkan card atau pesan sendiri.
 pub const FINAL: [&str; 5] = ["submitForApproval", "createTicket", "holdRoom", "reportDamage", "answerWithCitation"];
 
@@ -449,5 +472,32 @@ pub async fn resume(cx: &mut Cx<'_>, p: &Pending, action: &str, payload: &Value)
         }
         ("findRooms", "pick") => fasilitas::pick(cx, payload).await,
         _ => Err(Nope("Aksi ini tidak cocok dengan card yang aktif.".into()).into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm;
+
+    fn names(v: Value) -> Vec<String> {
+        v.as_array().unwrap().iter().map(|d| d["function"]["name"].as_str().unwrap().to_owned()).collect()
+    }
+
+    #[test]
+    fn tool_per_layanan() {
+        let all = names(definitions());
+        assert!(GROUPS.iter().map(|g| g.len()).sum::<usize>() == all.len() && all.iter().all(|n| GROUPS.iter().any(|g| g.contains(&n.as_str()))));
+
+        let mut tr = vec![llm::user("mau surat dispensasi")];
+        assert_eq!(names(definitions_for(&tr)).len(), all.len());
+
+        tr.push(llm::assistant_call("c1".into(), "getStudentProfile", json!({})));
+        tr.push(llm::tool_result("c1", &json!({ "nama": "Raka" })));
+        assert_eq!(names(definitions_for(&tr)), GROUPS[0]);
+
+        // Mahasiswa menulis lagi di tengah alur: semua tool kembali tersedia.
+        tr.push(llm::user("eh AC di F2.3 mati"));
+        assert_eq!(names(definitions_for(&tr)).len(), all.len());
     }
 }

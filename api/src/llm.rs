@@ -65,7 +65,7 @@ impl Llm {
         let body = json!({
             "model": model,
             "messages": messages,
-            "tools": tools::definitions(),
+            "tools": tools::definitions_for(transcript),
             "tool_choice": "auto",
             "temperature": 0.2,
             // Rem biaya: balasan dan argumen tool LAYAN selalu pendek.
