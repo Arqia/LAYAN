@@ -1,0 +1,19 @@
+# API LAYAN (Rust). Konfigurasi di /home/arvamadax/layan/api/.env
+#   sudo cp deploy/layan-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now layan-api
+[Unit]
+Description=LAYAN API (Rust) - layan.codewithus.me
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=arvamadax
+WorkingDirectory=/home/arvamadax/layan/api
+ExecStart=/home/arvamadax/layan/api/target/release/layan-api
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

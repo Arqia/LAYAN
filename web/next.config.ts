@@ -3,6 +3,8 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   // ada package-lock.json nyasar di C:\Users\ARVA, kunci root ke folder ini
   turbopack: { root: __dirname },
+  // server.js mandiri: server cukup punya Node, tanpa npm install
+  output: "standalone",
   // Browser memanggil /api di domain yang sama, jadi cookie sesi tidak lintas domain.
   // Header keamanan dasar (panduan PWA Next.js)
   async headers() {

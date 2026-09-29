@@ -1,0 +1,23 @@
+# Web LAYAN (Next.js standalone). Isi /home/arvamadax/layan-web dikirim deploy/deploy-web.sh
+#   sudo cp deploy/layan-web.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now layan-web
+[Unit]
+Description=LAYAN Web (Next.js) - layan.codewithus.me
+After=network-online.target layan-api.service
+Wants=network-online.target
+
+[Service]
+User=arvamadax
+WorkingDirectory=/home/arvamadax/layan-web
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+Environment=PORT=8171
+Environment=HOSTNAME=127.0.0.1
+Environment=API_URL=http://127.0.0.1:8170
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
