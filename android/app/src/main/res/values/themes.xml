@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="layan_bg">#F7F7F5</color>
+    <color name="layan_primary">#0A7A66</color>
+    <style name="Theme.Layan" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/layan_bg</item>
+    </style>
+</resources>

@@ -67,7 +67,7 @@ Catatan Windows: laptop ini tidak punya MSVC Build Tools, jadi `api/` memakai
 - [x] Hari 3: Staff Console ke API (approve/reject/batalkan, audit log), surat HTML siap cetak/PDF, worker Helpdesk (FTS5 + tiket), Gemini `gemini-flash-lite-latest` dengan fallback ke mock saat error/timeout 20 detik
 - [x] Hari 4: worker Fasilitas (cari ruang + alternatif jam, tahan 24 jam, konfirmasi staf, laporan kerusakan digabung otomatis), Board Teknisi ke API (pelapor dikabari saat selesai), balasan tiket oleh staf, metrik dampak dari audit log, lock agent per mahasiswa, PWA installable (manifest, ikon, service worker offline)
 - [x] Deploy: https://layan.codewithus.me (Cloudflare Tunnel, service layan-api :8170 dan layan-web :8171, password demo server berbeda dari repo)
-- [ ] Hari 5-6: app Android
+- [x] Hari 5-6: app Android (Kotlin + Compose): login Bearer, chat dengan 10 action card + SSE, upload dari HP, riwayat + detail, surat + simpan PDF lewat dialog cetak Android
 - [ ] Hari 7: data demo, skrip demo, cek akhir
 
 Catatan hari 3:
