@@ -1,0 +1,4 @@
+# Dev di Windows tanpa MSVC: pakai linker mingw bawaan rustup,
+# bukan TDM-GCC dari PATH (TDM tidak menyediakan libgcc_eh). Tidak berpengaruh di Linux.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-self-contained=yes"]

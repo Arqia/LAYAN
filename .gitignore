@@ -1,0 +1,4 @@
+# per-proyek: web/.gitignore dan api/.gitignore
+.claude/
+web/AGENTS.md
+web/CLAUDE.md

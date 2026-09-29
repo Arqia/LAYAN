@@ -1,0 +1,173 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* LAYAN Design System v1. Nama variabel mengikuti konvensi shadcn/ui. */
+:root {
+  --radius: 0.625rem;
+
+  --background: #F7F7F5;
+  --foreground: #16181A;
+  --card: #FFFFFF;
+  --card-foreground: #16181A;
+  --popover: #FFFFFF;
+  --popover-foreground: #16181A;
+  --muted: #F0F0EC;
+  --muted-foreground: #5C6066;
+  --subtle-foreground: #6F737A;
+  --soft-foreground: #3E4247;
+  --icon: #8B8F95;
+  --border: #E4E3DE;
+  --input: #D9D8D2;
+  --ring: #0A7A66;
+  --primary: #0A7A66;
+  --primary-hover: #086957;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F0F0EC;
+  --secondary-foreground: #16181A;
+  --accent: #E2F2EE;
+  --accent-foreground: #086957;
+  --destructive: #B3261E;
+  --destructive-foreground: #FFFFFF;
+  --destructive-soft: #FCE7E5;
+  --destructive-border: #F2C4BF;
+  --ink: #16181A;
+  --ink-foreground: #FFFFFF;
+  --panel: #FBFBFA;
+  --dash: #C9C8C1;
+
+  /* status: fg / bg / dot */
+  --status-submitted: #54585E;        --status-submitted-bg: #EEEEEA;        --status-submitted-dot: #8B8F95;
+  --status-processing: #1D5FC7;       --status-processing-bg: #E5EEFC;       --status-processing-dot: #2F74E0;
+  --status-needs_info: #9A5B00;       --status-needs_info-bg: #FCF0D8;       --status-needs_info-dot: #D08A12;
+  --status-pending_approval: #6A45C4; --status-pending_approval-bg: #EFE9FC; --status-pending_approval-dot: #8561DE;
+  --status-approved: #18793C;         --status-approved-bg: #E2F3E7;         --status-approved-dot: #2E9B55;
+  --status-rejected: #B3261E;         --status-rejected-bg: #FCE7E5;         --status-rejected-dot: #D6453B;
+  --status-done: #FFFFFF;             --status-done-bg: #16181A;             --status-done-dot: #34C3A5;
+
+  /* worker: fg / bg */
+  --worker-surat: #0A7A66;     --worker-surat-bg: #E2F2EE;
+  --worker-helpdesk: #8E3F8C;  --worker-helpdesk-bg: #F6E8F5;
+  --worker-fasilitas: #B4541A; --worker-fasilitas-bg: #FBEBDF;
+
+  /* ungu "ditahan" / aksi terakhir */
+  --hold: #553599;
+}
+
+.dark {
+  --background: #0D0F10;
+  --foreground: #ECEEEF;
+  --card: #151819;
+  --card-foreground: #ECEEEF;
+  --popover: #151819;
+  --popover-foreground: #ECEEEF;
+  --muted: #1C2021;
+  --muted-foreground: #A0A6AA;
+  --subtle-foreground: #868C91;
+  --soft-foreground: #C4C9CD;
+  --icon: #868C91;
+  --border: #272C2E;
+  --input: #33393B;
+  --ring: #34C3A5;
+  --primary: #34C3A5;
+  --primary-hover: #4DD3B6;
+  --primary-foreground: #04201A;
+  --secondary: #1C2021;
+  --secondary-foreground: #ECEEEF;
+  --accent: #10352E;
+  --accent-foreground: #34C3A5;
+  --destructive: #FF8A80;
+  --destructive-foreground: #04201A;
+  --destructive-soft: #3F1714;
+  --destructive-border: #5A2420;
+  --ink: #ECEEEF;
+  --ink-foreground: #0D0F10;
+  --panel: #121516;
+  --dash: #3A4043;
+
+  --status-submitted: #B5BABE;        --status-submitted-bg: #24292B;        --status-submitted-dot: #868C91;
+  --status-processing: #8DB8FF;       --status-processing-bg: #15284A;       --status-processing-dot: #7FB0FF;
+  --status-needs_info: #F2B955;       --status-needs_info-bg: #3A2A0C;       --status-needs_info-dot: #F2B955;
+  --status-pending_approval: #C3AEFF; --status-pending_approval-bg: #2A1F4A; --status-pending_approval-dot: #B9A0FF;
+  --status-approved: #6FD68F;         --status-approved-bg: #10321C;         --status-approved-dot: #6FD68F;
+  --status-rejected: #FF9A91;         --status-rejected-bg: #3F1714;         --status-rejected-dot: #FF8A80;
+  --status-done: #0D0F10;             --status-done-bg: #ECEEEF;             --status-done-dot: #0A7A66;
+
+  --worker-surat: #34C3A5;     --worker-surat-bg: #10352E;
+  --worker-helpdesk: #E08BDD;  --worker-helpdesk-bg: #351A34;
+  --worker-fasilitas: #F29A62; --worker-fasilitas-bg: #3A2114;
+
+  --hold: #C3AEFF;
+}
+
+@theme inline {
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-soft-foreground: var(--soft-foreground);
+  --color-icon: var(--icon);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-border: var(--destructive-border);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-panel: var(--panel);
+  --color-dash: var(--dash);
+  --color-hold: var(--hold);
+  --color-ok: var(--status-approved);
+  --color-ok-bg: var(--status-approved-bg);
+  --color-warn: var(--status-needs_info);
+  --color-warn-bg: var(--status-needs_info-bg);
+  --color-violet: var(--status-pending_approval);
+  --color-violet-bg: var(--status-pending_approval-bg);
+  --color-violet-dot: var(--status-pending_approval-dot);
+
+  --shadow-e1: 0 1px 2px rgba(22, 24, 26, .06);
+  --shadow-e2: 0 24px 64px -16px rgba(22, 24, 26, .4);
+  --shadow-toast: 0 20px 48px -16px rgba(22, 24, 26, .5);
+
+  --animate-typing: ly-pulse 1.2s ease-in-out infinite;
+  --animate-toast-in: ly-toast-in .25s ease-out;
+
+  @keyframes ly-pulse {
+    0%, 100% { opacity: 1; transform: translateY(0); }
+    50% { opacity: .3; transform: translateY(-2px); }
+  }
+  @keyframes ly-toast-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
