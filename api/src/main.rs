@@ -1,9 +1,18 @@
+mod agent;
 mod auth;
+mod chat;
 mod error;
+mod llm;
+mod mock;
+mod requests;
 mod seed;
+mod tools;
+mod util;
 
 use std::str::FromStr;
+use std::sync::Arc;
 
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
@@ -13,13 +22,23 @@ use utoipa::OpenApi;
 pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub cookie_secure: bool,
+    pub llm: Arc<llm::Llm>,
+    pub agent_lock: Arc<tokio::sync::Mutex<()>>,
+    pub upload_dir: String,
 }
 
 #[derive(OpenApi)]
 #[openapi(
-    info(title = "LAYAN API", version = "0.1.0"),
-    paths(health, auth::login, auth::logout, auth::me),
-    components(schemas(auth::Role, auth::User, auth::LoginReq, auth::LoginRes))
+    info(title = "LAYAN API", version = "0.2.0"),
+    paths(
+        health, auth::login, auth::logout, auth::me,
+        chat::list, chat::send, chat::action, chat::upload,
+        requests::mine, requests::detail, requests::queue, requests::decide, requests::undo,
+    ),
+    components(schemas(
+        auth::Role, auth::User, auth::LoginReq, auth::LoginRes,
+        agent::ChatMessage, chat::SendReq, chat::ActionReq, requests::DecideReq,
+    ))
 )]
 struct ApiDoc;
 
@@ -49,13 +68,31 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!().run(&db).await?;
     seed::run(&db).await?;
 
-    let state = AppState { db, cookie_secure: env_or("COOKIE_SECURE", "0") == "1" };
+    let llm = llm::Llm::from_env();
+    println!("LLM: {}", llm.name());
+    let state = AppState {
+        db,
+        cookie_secure: env_or("COOKIE_SECURE", "0") == "1",
+        llm: Arc::new(llm),
+        agent_lock: Arc::default(),
+        upload_dir: env_or("UPLOAD_DIR", "uploads"),
+    };
+
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/openapi.json", get(|| async { Json(ApiDoc::openapi()) }))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/me", get(auth::me))
+        .route("/api/chat", get(chat::list).post(chat::send))
+        .route("/api/chat/action", post(chat::action))
+        .route("/api/attachments", post(chat::upload).layer(DefaultBodyLimit::max(6 * 1024 * 1024)))
+        .route("/api/attachments/{id}", get(chat::download))
+        .route("/api/requests", get(requests::mine))
+        .route("/api/requests/{id}", get(requests::detail))
+        .route("/api/staff/queue", get(requests::queue))
+        .route("/api/staff/requests/{id}/decide", post(requests::decide))
+        .route("/api/staff/requests/{id}/undo", post(requests::undo))
         .with_state(state);
 
     let addr = env_or("BIND", "127.0.0.1:8080");

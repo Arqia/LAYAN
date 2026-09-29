@@ -63,7 +63,15 @@ Catatan Windows: laptop ini tidak punya MSVC Build Tools, jadi `api/` memakai
 ## Progres
 
 - [x] Hari 1: git init, Next.js pindah ke `web/`, API Rust (skema, seed, login cookie + Bearer, OpenAPI), halaman login, proxy per peran
-- [ ] Hari 2
+- [x] Hari 2: agent loop (tool calling format OpenAI) + provider mock, worker Surat end-to-end, SSE status ke chat, upload lampiran
+- [x] Hari 3: Staff Console ke API (approve/reject/batalkan, audit log), surat HTML siap cetak/PDF, worker Helpdesk (FTS5 + tiket), Gemini `gemini-flash-lite-latest` dengan fallback ke mock saat error/timeout 20 detik
+- [ ] Hari 4
+
+Catatan hari 3:
+- PDF memakai halaman `/surat/[id]` + dialog cetak browser, bukan Typst (tanpa dependency, hasil sama).
+- Model Flash non-lite sering "high demand" di free tier (5–40 detik); lite stabil sekitar 2 detik per langkah.
+- Isi knowledge base di `api/migrations/0002_agent.sql` adalah contoh, bukan pedoman resmi.
+- Tiga metrik pertama Staff Console masih angka desain, dihitung dari audit log di hari 4.
 
 ## Di luar MVP
 
@@ -71,6 +79,6 @@ Push notification · sinkronisasi offline · uji DeepSeek · vector search · ed
 
 ## Tugas pemilik proyek
 
-- [ ] API key Gemini dari https://aistudio.google.com/apikey (dibutuhkan hari 3)
-- [ ] Rust terpasang di laptop ini (`rustup`), dibutuhkan hari 1
+- [x] API key Gemini dari https://aistudio.google.com/apikey (dibutuhkan hari 3)
+- [x] Rust terpasang di laptop ini (`rustup`), dibutuhkan hari 1
 - [ ] Android Studio + SDK platform terpasang, dibutuhkan hari 5

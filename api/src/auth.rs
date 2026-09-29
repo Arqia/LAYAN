@@ -1,4 +1,3 @@
-use argon2::password_hash::rand_core::{OsRng, RngCore};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::extract::{FromRequestParts, State};
 use axum::http::{header, request::Parts, HeaderMap};
@@ -54,6 +53,12 @@ pub struct LoginRes {
 pub struct CurrentUser {
     pub user: User,
     token: String,
+}
+
+impl CurrentUser {
+    pub fn require(&self, role: Role) -> Result<(), AppError> {
+        if self.user.role == role { Ok(()) } else { Err(AppError::Forbidden) }
+    }
 }
 
 impl FromRequestParts<AppState> for CurrentUser {
@@ -120,9 +125,7 @@ pub async fn login(State(s): State<AppState>, Json(req): Json<LoginReq>) -> Resu
     }
 
     // Catatan: token disimpan apa adanya di SQLite. Simpan hash-nya kalau DB bisa bocor ke pihak lain.
-    let mut bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let token = crate::util::random_hex(32);
     sqlx::query("INSERT INTO sessions (token, user_id, expires_at) VALUES (?1, ?2, unixepoch() + ?3)")
         .bind(&token)
         .bind(&user_id)

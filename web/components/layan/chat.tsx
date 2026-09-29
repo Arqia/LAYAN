@@ -1,19 +1,18 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import Link from "next/link"
-import {
-  ArrowUp, CalendarClock, ChevronRight, CircleAlert, CircleCheck, History, Paperclip, RefreshCw, ShieldCheck, WifiOff,
-} from "lucide-react"
+import { ArrowUp, ChevronRight, CircleAlert, CircleCheck, History, Paperclip, RefreshCw, ShieldCheck, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Worker } from "@/lib/data"
+import type { Check, Worker } from "@/lib/data"
+import { api, stream, type AgentEvent, type ChatMessage } from "@/lib/api"
 import {
-  AnswerCard, BookingHeldCard, ChecksCard, CollapsedCard, DraftCard, FormCard, LetterDoneCard,
-  ReportCard, RoomsCard, TicketCard, UPLOAD_INPUT_ID, UploadCard, type Room,
+  AnswerCard, ChecksCard, CollapsedCard, DraftCard, FormCard, LetterDoneCard, TicketCard, UPLOAD_INPUT_ID, UploadCard,
+  type Answer, type LetterDone, type Ticket,
 } from "./action-cards"
 import { AccountPill } from "./app-bar"
 import { AgentAvatar, FileTypeTile, Mark, TypingDots, WorkerTile, formatSize } from "./primitives"
-import { useStore, type FileInfo, type Msg } from "./store"
+import { useStore } from "./store"
 
 /* ---------- koneksi (native online/offline event) ---------- */
 
@@ -27,104 +26,13 @@ function subscribe(cb: () => void) {
 }
 const useOnline = () => useSyncExternalStore(subscribe, () => navigator.onLine, () => true)
 
-/* ---------- alur demo ---------- */
-
 const SHORTCUTS: { worker: Worker; title: string; sub: string; prompt: string }[] = [
   { worker: "surat", title: "Minta surat", sub: "Aktif kuliah, dispensasi", prompt: "Kak, aku mau minta surat izin lomba tanggal 10–12 Oktober" },
   { worker: "helpdesk", title: "Tanya aturan akademik", sub: "SKS, cuti, nilai. Lengkap dengan sumber", prompt: "Batas maksimal SKS kalau IP semester lalu 3,2 berapa?" },
   { worker: "fasilitas", title: "Lapor kerusakan / booking ruangan", sub: "Cek bentrok, langsung ke teknisi", prompt: "Mau booking ruang rapat Jumat 13.00–15.00, 20 orang" },
 ]
 
-const DRAFT_STEPS = [
-  { doing: "Mengecek syarat surat", done: "Status aktif, UKT lunas" },
-  { doing: "Membuat draft Surat Dispensasi", done: "Menyusun draft PDF" },
-  { doing: "Mengirim ke staf", done: "Kirim ke staf untuk persetujuan" },
-]
-
-const uid = () => Math.random().toString(36).slice(2, 10)
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const joinList = (s: string) => {
-  const p = s.split(",").map((x) => x.trim()).filter(Boolean)
-  return p.length > 1 ? `${p.slice(0, -1).join(", ")} dan ${p.at(-1)}` : p[0] ?? ""
-}
-
-function useFlows() {
-  const { setMessages, setAgent } = useStore()
-  const push = (...m: Msg[]) => setMessages((s) => [...s, ...m])
-  const patch = (id: string, p: Partial<Msg>) => setMessages((s) => s.map((m) => (m.id === id ? ({ ...m, ...p } as Msg) : m)))
-  const agentDo = async (label: string, msgs: Msg[], ms = 1100) => {
-    setAgent({ label })
-    await wait(ms)
-    setAgent(null)
-    push(...msgs)
-  }
-  const agent = (p: Omit<Extract<Msg, { from: "agent" }>, "id" | "from">): Msg => ({ id: uid(), from: "agent", ...p })
-
-  async function uploadOk() {
-    push(agent({ text: "Lampiran diterima. Sekarang aku cek syarat dan buat draft suratnya." }))
-    for (let step = 0; step < DRAFT_STEPS.length; step++) {
-      setAgent({ label: DRAFT_STEPS[step].doing, steps: DRAFT_STEPS.map((s) => s.done), step })
-      await wait(1200)
-    }
-    setAgent(null)
-    push(agent({ text: "Syarat surat sudah aku cek. Semua aman.", card: "checks" }))
-    await wait(600)
-    push(agent({ text: "Draft sudah aku kirim ke staf. Biasanya diproses di jam kerja.", card: "draft" }))
-  }
-
-  return {
-    push,
-    send(text: string, first: boolean) {
-      const now = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
-      push(...(first ? [{ id: uid(), from: "time", text: `Hari ini · ${now}` } as Msg] : []), { id: uid(), from: "user", text })
-      if (/rusak|mati|bocor|mampet|putus|kedip|tidak menyala|lapor/i.test(text))
-        return agentDo("Mencatat laporan", [agent({ text: "Sudah aku catat dan teruskan ke teknisi. Makasih laporannya.", card: "report" })])
-      if (/surat|izin|dispensasi|lomba/i.test(text))
-        return agentDo("Mengambil data profil", [
-          agent({ text: "Siap. Aku buatkan Surat Dispensasi ya. Data profil kamu sudah aku ambil. Tinggal dua hal:", card: "form", state: "active" }),
-        ])
-      if (/booking|pinjam|ruang/i.test(text))
-        return agentDo("Mengecek jadwal ruangan", [agent({ text: "G2.4 sudah dipakai di jam itu. Ini yang masih kosong:", card: "rooms", state: "active" })])
-      if (/sks|\bip\b|ipk|cuti|nilai|aturan|akademik/i.test(text))
-        return agentDo("Mencari di Pedoman Akademik", [agent({ card: "answer", state: "active" })], 1400)
-      return agentDo("Membaca permintaanmu", [
-        agent({ text: "Aku bisa bantu tiga hal: minta surat, tanya aturan akademik, dan urusan fasilitas (booking ruang atau lapor kerusakan). Coba ceritakan lebih spesifik ya." }),
-      ])
-    },
-    submitForm(id: string, v: { activity: string; courses: string }) {
-      patch(id, { state: "submitted" })
-      push({ id: uid(), from: "user", text: `${v.activity}, ${joinList(v.courses)}` })
-      agentDo("Menyiapkan permintaan lampiran", [
-        agent({ text: "Terakhir, upload bukti kegiatan (surat undangan atau pengumuman lolos).", card: "upload", state: "active" }),
-      ])
-    },
-    upload(id: string, file: FileInfo, online: boolean) {
-      patch(id, { state: "submitted" })
-      push({ id: uid(), from: "user", file, failed: !online })
-      if (online) uploadOk()
-    },
-    retry(id: string) {
-      patch(id, { failed: false })
-      uploadOk()
-    },
-    ticket(id: string) {
-      patch(id, { state: "submitted" })
-      agentDo("Membuat tiket ke Bagian Akademik", [
-        agent({ text: "Oke, pertanyaanmu aku teruskan ke Bagian Akademik. Jawabannya nanti muncul di sini.", card: "ticket" }),
-      ])
-    },
-    pickRoom(id: string, room: Room) {
-      patch(id, { state: "submitted", room })
-      agentDo(`Menahan ruang ${room.code}`, [
-        agent({ text: `${room.code} sudah aku tahan untukmu. Tinggal dikonfirmasi staf.`, card: "held", state: "active", room }),
-      ])
-    },
-    cancelBooking(id: string, room: Room) {
-      patch(id, { state: "cancelled" })
-      push(agent({ text: `Booking ${room.code} dibatalkan. Ruangnya sudah aku lepas.` }))
-    },
-  }
-}
+type AgentStatus = { label: string; steps: string[] | null; step: number | null } | null
 
 /* ---------- tampilan ---------- */
 
@@ -145,9 +53,9 @@ function AgentBubble({ children, className }: { children: ReactNode; className?:
   )
 }
 
-function Typing() {
-  const { agent } = useStore()
+function Typing({ agent }: { agent: AgentStatus }) {
   if (!agent) return null
+  const step = agent.step ?? 0
   return (
     <AgentRow>
       <AgentBubble className={cn("flex flex-col gap-2.5 py-3", agent.steps && "min-w-60")}>
@@ -157,29 +65,26 @@ function Typing() {
         </div>
         {agent.steps && (
           <div className="flex flex-col gap-1.5 border-t pt-2.5">
-            {agent.steps.map((s, i) => {
-              const step = agent.step ?? 0
-              return (
-                <span
-                  key={s}
-                  className={cn(
-                    "flex items-center gap-2 text-xs",
-                    i < step && "text-muted-foreground",
-                    i === step && "font-medium",
-                    i > step && "text-subtle-foreground",
-                  )}
-                >
-                  {i < step ? (
-                    <CircleCheck className="size-3.5 text-ok" />
-                  ) : i === step ? (
-                    <span className="size-3.5 animate-spin rounded-full border-2 border-primary border-r-transparent" />
-                  ) : (
-                    <span className="size-3.5 rounded-full border-[1.5px] border-dashed border-icon" />
-                  )}
-                  {s}
-                </span>
-              )
-            })}
+            {agent.steps.map((s, i) => (
+              <span
+                key={s}
+                className={cn(
+                  "flex items-center gap-2 text-xs",
+                  i < step && "text-muted-foreground",
+                  i === step && "font-medium",
+                  i > step && "text-subtle-foreground",
+                )}
+              >
+                {i < step ? (
+                  <CircleCheck className="size-3.5 text-ok" />
+                ) : i === step ? (
+                  <span className="size-3.5 animate-spin rounded-full border-2 border-primary border-r-transparent" />
+                ) : (
+                  <span className="size-3.5 rounded-full border-[1.5px] border-dashed border-icon" />
+                )}
+                {s}
+              </span>
+            ))}
           </div>
         )}
       </AgentBubble>
@@ -187,24 +92,27 @@ function Typing() {
   )
 }
 
-function FileBubble({ file, failed, onRetry, disabled }: { file: FileInfo; failed?: boolean; onRetry: () => void; disabled: boolean }) {
-  if (!failed)
-    return (
-      <div className="flex w-[250px] items-center gap-2.5 self-end rounded-[18px_18px_6px_18px] bg-primary p-2 text-primary-foreground">
-        <FileTypeTile name={file.name} onPrimary />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm font-semibold">{file.name}</span>
-          <span className="text-xs opacity-85">{formatSize(file.size)}</span>
-        </div>
+function FileBubble({ file }: { file: { name: string; size: number } }) {
+  return (
+    <div className="flex w-[250px] items-center gap-2.5 self-end rounded-[18px_18px_6px_18px] bg-primary p-2 text-primary-foreground">
+      <FileTypeTile name={file.name} onPrimary />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-sm font-semibold">{file.name}</span>
+        <span className="text-xs opacity-85">{formatSize(file.size)}</span>
       </div>
-    )
+    </div>
+  )
+}
+
+/** Upload yang putus karena koneksi. File masih di browser, bisa dicoba lagi. */
+function FailedUpload({ file, onRetry, disabled }: { file: File; onRetry: () => void; disabled: boolean }) {
   return (
     <div className="flex flex-col items-end gap-1.5 self-end">
       <div className="flex w-[250px] items-center gap-2.5 rounded-[18px_18px_6px_18px] border-[1.5px] border-dashed bg-card p-2" style={{ borderColor: "var(--status-rejected-dot)" }}>
         <FileTypeTile name={file.name} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-sm font-semibold">{file.name}</span>
-          <span className="text-xs text-muted-foreground">Terhenti di 38%</span>
+          <span className="text-xs text-muted-foreground">{formatSize(file.size)} · belum terkirim</span>
         </div>
       </div>
       <span className="flex items-center gap-1.5 text-xs font-medium text-destructive">
@@ -215,7 +123,7 @@ function FileBubble({ file, failed, onRetry, disabled }: { file: FileInfo; faile
         type="button"
         onClick={onRetry}
         disabled={disabled}
-        className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-input bg-card px-3.5 text-sm font-semibold hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-input bg-card px-3.5 text-sm font-semibold hover:bg-background active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
       >
         <RefreshCw className="size-[15px]" />
         Coba upload lagi
@@ -239,7 +147,7 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
             key={s.title}
             type="button"
             onClick={() => onPick(s.prompt)}
-            className="flex min-h-[68px] cursor-pointer items-center gap-3.5 rounded-lg border bg-card px-3.5 py-3 text-left hover:bg-background"
+            className="flex min-h-[68px] cursor-pointer items-center gap-3.5 rounded-lg border bg-card px-3.5 py-3 text-left hover:bg-background active:scale-[0.98]"
           >
             <WorkerTile worker={s.worker} size={40} />
             <span className="flex flex-1 flex-col gap-0.5">
@@ -258,6 +166,16 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
   )
 }
 
+function Skeleton() {
+  return (
+    <div className="flex min-h-full flex-col justify-end gap-3 p-4" aria-label="Memuat percakapan">
+      {["ml-auto w-2/3", "w-3/4", "w-4/5 h-40", "ml-auto w-1/2"].map((c) => (
+        <div key={c} className={cn("h-11 animate-pulse rounded-[18px] bg-muted", c)} />
+      ))}
+    </div>
+  )
+}
+
 export function MobileHeader({ bordered, right }: { bordered?: boolean; right?: ReactNode }) {
   return (
     <header className={cn("flex h-14 flex-none items-center gap-2.5 pl-4 pr-3", bordered && "border-b")}>
@@ -269,80 +187,113 @@ export function MobileHeader({ bordered, right }: { bordered?: boolean; right?: 
   )
 }
 
+/* ---------- loket chat ---------- */
+
 export function Chat() {
-  const { messages, agent, decisions } = useStore()
-  const flows = useFlows()
   const online = useOnline()
+  const [messages, setMessages] = useState<ChatMessage[] | null>(null)
+  const [agent, setAgent] = useState<AgentStatus>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const [failed, setFailed] = useState<{ file: File; messageId: number } | null>(null)
   const [text, setText] = useState("")
   const scroller = useRef<HTMLDivElement>(null)
-  const empty = messages.length === 0
-  const busy = !!agent
-  const uploadActive = messages.some((m) => m.from === "agent" && m.card === "upload" && m.state === "active")
-  const uploadFailed = messages.some((m) => m.from === "user" && m.failed)
+
+  const load = useCallback(
+    () =>
+      api<ChatMessage[]>("/chat").then(setMessages, (e: Error) => {
+        setError(e.message)
+        setMessages((m) => m ?? [])
+      }),
+    [],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  // Keputusan staf masuk sebagai pesan baru. Cek tiap 5 detik saat tab terlihat dan agent diam.
+  useEffect(() => {
+    if (busy) return
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 5000)
+    return () => clearInterval(t)
+  }, [busy, load])
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" })
-  }, [messages, agent])
+  }, [messages?.length, agent, failed])
 
-  // Keputusan staf di Staff Console dikirim ke chat mahasiswa.
-  const r1 = decisions.r1
-  useEffect(() => {
-    if (!r1 || !messages.some((m) => m.from === "agent" && m.card === "draft") || messages.some((m) => m.id === "decision-r1")) return
-    flows.push(
-      r1.kind === "ok"
-        ? { id: "decision-r1", from: "agent", text: "Surat Dispensasi kamu sudah disetujui. Semangat lombanya!", card: "done" }
-        : { id: "decision-r1", from: "agent", text: `Surat Dispensasi kamu belum disetujui staf. Alasannya: ${r1.reason}` },
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r1])
+  const onEvent = useCallback((e: AgentEvent) => {
+    if (e.type === "status") setAgent(e.label ? { label: e.label, steps: e.steps, step: e.step } : null)
+    else if (e.type === "message") setMessages((ms) => (ms?.some((m) => m.id === e.message.id) ? ms : [...(ms ?? []), e.message]))
+    else if (e.type === "update") setMessages((ms) => ms?.map((m) => (m.id === e.id && m.card ? { ...m, card: { ...m.card, state: e.state } } : m)) ?? ms)
+    else if (e.type === "error") setError(e.message)
+  }, [])
+
+  async function run(path: string, body: unknown) {
+    setBusy(true)
+    setError("")
+    try {
+      await stream(path, body, onEvent)
+    } catch (e) {
+      setError(e instanceof TypeError ? "Koneksi terputus. Progres kamu aman, coba lagi." : (e as Error).message)
+    } finally {
+      setBusy(false)
+      setAgent(null)
+    }
+  }
 
   function send(t: string) {
     if (!t.trim() || busy || !online) return
-    flows.send(t.trim(), empty)
     setText("")
+    run("/chat", { text: t.trim() })
   }
 
-  function renderCard(m: Extract<Msg, { from: "agent" }>) {
-    const done = m.state === "submitted"
-    switch (m.card) {
-      case "form":
-        return done ? <CollapsedCard worker="surat" title="Data kegiatan" /> : <FormCard onSubmit={(v) => flows.submitForm(m.id, v)} />
-      case "upload":
-        return done ? (
-          uploadFailed ? <CollapsedCard worker="surat" title="Bukti kegiatan" note="Menunggu upload" tone="warn" /> : <CollapsedCard worker="surat" title="Bukti kegiatan" />
-        ) : (
-          <UploadCard onUpload={(f) => flows.upload(m.id, f, online)} />
-        )
-      case "checks":
-        return (
-          <ChecksCard
-            checks={[
-              { ok: true, label: "Status aktif", note: "Semester 3, Ganjil 2026/2027" },
-              { ok: true, label: "UKT lunas", note: "Dibayar 14 Agu 2026" },
-              { ok: true, label: "Lampiran valid", note: "undangan_gemastik.pdf" },
-            ]}
-          />
-        )
-      case "draft":
-        return <DraftCard />
-      case "answer":
-        return <AnswerCard ticketed={done} onTicket={() => flows.ticket(m.id)} />
-      case "ticket":
-        return <TicketCard />
-      case "rooms":
-        return done ? <CollapsedCard worker="fasilitas" title={`Ruang dipilih · ${m.room?.code}`} /> : <RoomsCard onPick={(r) => flows.pickRoom(m.id, r)} />
-      case "held":
-        return m.state === "cancelled" ? (
-          <CollapsedCard worker="fasilitas" icon={CalendarClock} title={`Booking ${m.room?.code}`} note="Dibatalkan" tone="muted" />
-        ) : (
-          <BookingHeldCard room={m.room} onCancel={() => flows.cancelBooking(m.id, m.room!)} />
-        )
-      case "report":
-        return <ReportCard />
-      case "done":
-        return <LetterDoneCard />
+  const act = (messageId: number, action: string, payload: unknown = {}) => run("/chat/action", { message_id: messageId, action, payload })
+
+  async function upload(messageId: number, file: File): Promise<string | void> {
+    if (!navigator.onLine) return setFailed({ file, messageId })
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const att = await api<{ id: string }>("/attachments", { method: "POST", body: fd })
+      setFailed(null)
+      await act(messageId, "upload", { attachment_id: att.id })
+    } catch (e) {
+      if (e instanceof TypeError) return setFailed({ file, messageId }) // jaringan putus di tengah jalan
+      return (e as Error).message
     }
   }
+
+  function renderCard(m: ChatMessage) {
+    const c = m.card!
+    const d = c.data
+    const skipped = c.state === "skipped"
+    switch (c.kind) {
+      case "form":
+        if (c.state !== "active") return <CollapsedCard worker="surat" title="Data kegiatan" note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
+        return <FormCard onSubmit={(v) => act(m.id, "submit", v)} />
+      case "upload":
+        if (failed?.messageId === m.id) return <CollapsedCard worker="surat" title="Bukti kegiatan" note="Menunggu upload" tone="warn" />
+        if (c.state !== "active") return <CollapsedCard worker="surat" title="Bukti kegiatan" note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
+        return <UploadCard onUpload={(f) => upload(m.id, f)} />
+      case "checks":
+        return <ChecksCard checks={d.checks as Check[]} footer={(d.footer as { note: string } | null) ?? undefined} />
+      case "draft":
+        return <DraftCard title={d.title as string} meta={d.meta as string} requestId={d.request_id as string} />
+      case "answer":
+        return <AnswerCard data={d as Answer} ticketed={c.state !== "active"} onTicket={() => act(m.id, "ticket")} />
+      case "ticket":
+        return <TicketCard data={d as Ticket} />
+      case "done":
+        return <LetterDoneCard data={d as LetterDone} />
+      default:
+        return null
+    }
+  }
+
+  const empty = messages?.length === 0
+  const uploadActive = messages?.some((m) => m.card?.kind === "upload" && m.card.state === "active" && failed?.messageId !== m.id)
 
   return (
     <div className="mx-auto flex h-dvh max-w-[480px] flex-col bg-background sm:border-x">
@@ -364,36 +315,43 @@ export function Chat() {
       )}
 
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-        {empty ? (
+        {messages === null ? (
+          <Skeleton />
+        ) : empty ? (
           <EmptyState onPick={send} />
         ) : (
           <div className="flex min-h-full flex-col justify-end gap-3 p-4">
-            {messages.map((m) => {
-              if (m.from === "time")
-                return (
-                  <span key={m.id} className="self-center text-xs font-medium text-muted-foreground">
-                    {m.text}
-                  </span>
-                )
-              if (m.from === "user")
-                return m.file ? (
-                  <FileBubble key={m.id} file={m.file} failed={m.failed} disabled={!online} onRetry={() => flows.retry(m.id)} />
+            {messages.map((m) =>
+              m.sender === "user" ? (
+                m.file ? (
+                  <FileBubble key={m.id} file={m.file} />
                 ) : (
-                  <div key={m.id} className="max-w-[82%] self-end rounded-[18px_18px_6px_18px] bg-primary px-3.5 py-2.5 text-[15px] leading-[22px] text-primary-foreground">
+                  <div key={m.id} className="max-w-[82%] self-end whitespace-pre-wrap rounded-[18px_18px_6px_18px] bg-primary px-3.5 py-2.5 text-[15px] leading-[22px] text-primary-foreground">
                     {m.text}
                   </div>
                 )
-              return (
+              ) : (
                 <AgentRow key={m.id}>
                   {m.text && <AgentBubble>{m.text}</AgentBubble>}
                   {m.card && renderCard(m)}
                 </AgentRow>
-              )
-            })}
-            <Typing />
+              ),
+            )}
+            {failed && <FailedUpload file={failed.file} disabled={!online || busy} onRetry={() => upload(failed.messageId, failed.file)} />}
+            <Typing agent={agent} />
           </div>
         )}
       </div>
+
+      {error && (
+        <div role="alert" className="flex flex-none items-start gap-2 border-t bg-destructive-soft/60 px-4 py-2 text-[13px] leading-[18px] text-destructive">
+          <CircleAlert className="mt-px size-4 flex-none" />
+          <span className="flex-1">{error}</span>
+          <button type="button" onClick={() => setError("")} className="cursor-pointer font-semibold hover:underline">
+            Tutup
+          </button>
+        </div>
+      )}
 
       <form
         className="flex flex-none items-end gap-2 border-t bg-background px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))]"
@@ -415,6 +373,7 @@ export function Chat() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={!online}
+          maxLength={2000}
           aria-label="Pesan"
           placeholder={!online ? "Menunggu koneksi…" : empty ? "Tulis permintaanmu…" : "Tulis pesan…"}
           className="h-11 min-w-0 flex-1 rounded-full border border-input bg-card px-4 text-[15px] outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-accent disabled:bg-muted"
@@ -423,7 +382,7 @@ export function Chat() {
           type="submit"
           aria-label="Kirim"
           disabled={!text.trim() || busy || !online}
-          className="grid size-11 flex-none cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary-hover disabled:cursor-default disabled:bg-border disabled:text-icon"
+          className="grid size-11 flex-none cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary-hover active:scale-95 disabled:cursor-default disabled:bg-border disabled:text-icon"
         >
           <ArrowUp className="size-5" />
         </button>

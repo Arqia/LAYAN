@@ -129,9 +129,11 @@ const ACCEPT = ["application/pdf", "image/jpeg", "image/png"]
 const MAX = 5 * 1024 * 1024
 export const UPLOAD_INPUT_ID = "ly-upload"
 
-export function UploadCard({ onUpload }: { onUpload?: (f: { name: string; size: number }) => void }) {
+/** `onUpload` mengembalikan pesan error kalau gagal. */
+export function UploadCard({ onUpload }: { onUpload?: (f: File) => Promise<string | void> }) {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState("")
+  const [busy, setBusy] = useState(false)
 
   function pick(f?: File) {
     if (!f) return
@@ -196,9 +198,19 @@ export function UploadCard({ onUpload }: { onUpload?: (f: { name: string; size: 
             <label htmlFor={UPLOAD_INPUT_ID}>Ganti file</label>
           </Button>
         )}
-        <Button size="card" className="w-full" disabled={!file} onClick={() => file && onUpload?.({ name: file.name, size: file.size })}>
+        <Button
+          size="card"
+          className="w-full"
+          disabled={!file || busy}
+          onClick={async () => {
+            if (!file || !onUpload) return
+            setBusy(true)
+            setError((await onUpload(file)) ?? "")
+            setBusy(false)
+          }}
+        >
           <Upload />
-          Upload
+          {busy ? "Mengupload…" : "Upload"}
         </Button>
       </div>
     </CardShell>
@@ -272,7 +284,11 @@ export function DraftThumb() {
   )
 }
 
-export function DraftCard({ title = "Surat Dispensasi", meta = "Gemastik 2026 · 10–12 Okt · 2 mata kuliah" }: { title?: string; meta?: string }) {
+export function DraftCard({
+  title = "Surat Dispensasi",
+  meta = "Gemastik 2026 · 10–12 Okt · 2 mata kuliah",
+  requestId = "REQ-2026-0931",
+}: { title?: string; meta?: string; requestId?: string }) {
   return (
     <CardShell worker="surat" title="Draft surat">
       <div className="flex gap-3.5 p-3.5">
@@ -286,7 +302,7 @@ export function DraftCard({ title = "Surat Dispensasi", meta = "Gemastik 2026 ·
       </div>
       <div className="px-3.5 pb-3.5">
         <Button variant="outline" size="card" className="w-full" asChild>
-          <Link href="/riwayat/REQ-2026-0931">
+          <Link href={`/surat/${requestId}`}>
             <Eye />
             Lihat PDF
           </Link>
@@ -298,23 +314,29 @@ export function DraftCard({ title = "Surat Dispensasi", meta = "Gemastik 2026 ·
 
 /* ---------- 5 · Jawaban helpdesk ---------- */
 
-export function AnswerCard({ onTicket, ticketed }: { onTicket?: () => void; ticketed?: boolean }) {
+export type Answer = { headline: string; explanation: string; source_title: string; source_section: string }
+const SAMPLE_ANSWER: Answer = {
+  headline: "Maksimal 22 SKS",
+  explanation: "IP 3,00 sampai 3,49 boleh mengambil hingga 22 SKS. Mulai IP 3,50 bisa sampai 24 SKS.",
+  source_title: "Pedoman Akademik",
+  source_section: "Bab Beban Studi · Pasal (placeholder)",
+}
+
+export function AnswerCard({ data = SAMPLE_ANSWER, onTicket, ticketed }: { data?: Answer; onTicket?: () => void; ticketed?: boolean }) {
   return (
     <CardShell worker="helpdesk" title="Jawaban">
       <div className="flex flex-col gap-2 p-3.5">
-        <span className="text-[22px] font-bold leading-7 tracking-[-0.01em]">Maksimal 22 SKS</span>
-        <span className="text-pretty text-sm leading-[21px] text-soft-foreground">
-          IP 3,00 sampai 3,49 boleh mengambil hingga 22 SKS. Mulai IP 3,50 bisa sampai 24 SKS.
-        </span>
+        <span className="text-[22px] font-bold leading-7 tracking-[-0.01em]">{data.headline}</span>
+        <span className="text-pretty text-sm leading-[21px] text-soft-foreground">{data.explanation}</span>
       </div>
       <div className="mx-3.5 mb-3.5 flex items-start gap-2.5 rounded-md border bg-background px-3 py-2.5">
         <Quote className="mt-0.5 size-4 flex-none" style={{ color: "var(--worker-helpdesk)" }} />
         <div className="flex flex-1 flex-col gap-0.5">
-          <span className="text-[13px] font-semibold">Pedoman Akademik</span>
-          <span className="text-xs text-muted-foreground">Bab Beban Studi · Pasal (placeholder)</span>
+          <span className="text-[13px] font-semibold">{data.source_title}</span>
+          <span className="text-xs text-muted-foreground">{data.source_section}</span>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 border-t px-3.5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3.5 py-3">
         {/* Catatan: dokumen sumber asli belum masuk, tombol nonaktif sampai ada URL */}
         <Button variant="link" disabled title="Dokumen asli belum tersedia">
           <ExternalLink className="size-[15px]" />
@@ -330,12 +352,15 @@ export function AnswerCard({ onTicket, ticketed }: { onTicket?: () => void; tick
 
 /* ---------- 6 · Tiket dibuat ---------- */
 
-export function TicketCard() {
+export type Ticket = { ticket_id: string; category: string; unit: string; eta: string }
+const SAMPLE_TICKET: Ticket = { ticket_id: "TKT-2026-0318", category: "Beban studi / SKS", unit: "Bagian Akademik Fakultas", eta: "1 hari kerja" }
+
+export function TicketCard({ data = SAMPLE_TICKET }: { data?: Ticket }) {
   return (
     <CardShell worker="helpdesk" icon={Ticket} title="Tiket dibuat" right={<StatusBadge status="submitted" />}>
       <div className="flex flex-col gap-3 p-3.5">
-        <span className="font-mono text-lg font-semibold tracking-[.01em]">TKT-2026-0318</span>
-        <KeyValue rows={[["Kategori", "Beban studi / SKS"], ["Unit tujuan", "Bagian Akademik Fakultas"], ["Perkiraan", "1 hari kerja"]]} />
+        <span className="font-mono text-lg font-semibold tracking-[.01em]">{data.ticket_id}</span>
+        <KeyValue rows={[["Kategori", data.category], ["Unit tujuan", data.unit], ["Perkiraan", data.eta]]} />
       </div>
       <div className="px-3.5 pb-3.5">
         <Button variant="outline" size="card" className="w-full" asChild>
@@ -483,18 +508,22 @@ export function ReportCard() {
 
 /* ---------- 10 · Surat selesai ---------- */
 
-export function LetterDoneCard() {
+export type LetterDone = { letter_no: string; title: string; approved_by: string; approved_at: string; request_id: string }
+const SAMPLE_DONE: LetterDone = { letter_no: "SD/2026/10/0142", title: "Surat Dispensasi", approved_by: "Ibu Sari", approved_at: "10.02", request_id: "REQ-2026-0931" }
+
+export function LetterDoneCard({ data = SAMPLE_DONE }: { data?: LetterDone }) {
   return (
     <CardShell worker="surat" icon={FileCheck2} title="Surat selesai" right={<StatusBadge status="approved" />}>
       <div className="flex flex-col gap-1 p-3.5">
         <span className="text-xs text-muted-foreground">Nomor surat</span>
-        <span className="font-mono text-lg font-semibold">SD/2026/10/0142</span>
-        <span className="mt-1.5 text-[13px] text-muted-foreground">Surat Dispensasi · disetujui Ibu Sari, 10.02</span>
+        <span className="font-mono text-lg font-semibold">{data.letter_no}</span>
+        <span className="mt-1.5 text-[13px] text-muted-foreground">
+          {data.title} · disetujui {data.approved_by}, {data.approved_at}
+        </span>
       </div>
       <div className="px-3.5 pb-3.5">
-        {/* Catatan: PDF final belum ada backend-nya, tombol diarahkan ke detail riwayat */}
         <Button size="card" className="w-full" asChild>
-          <Link href="/riwayat/REQ-2026-0931">
+          <Link href={`/surat/${data.request_id}`}>
             <Download />
             Unduh PDF
           </Link>

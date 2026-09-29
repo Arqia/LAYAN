@@ -1,19 +1,36 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import {
-  ArrowDownWideNarrow, Bot, Check, ExternalLink, Inbox, Maximize2, MousePointerClick, Pencil, RotateCcw, X,
-} from "lucide-react"
+import { ArrowDownWideNarrow, Bot, Check, CircleAlert, ExternalLink, Inbox, Maximize2, MousePointerClick, Pencil, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { PEOPLE, QUEUE, type QueueItem } from "@/lib/data"
+import { api, post } from "@/lib/api"
+import type { Check as CheckT, Worker } from "@/lib/data"
 import { TopBar } from "./app-bar"
+import { LetterPaper, type LetterBody } from "./letter"
 import { StatusBadge, WorkerTile } from "./primitives"
-import { useStore } from "./store"
+
+type QueueItem = {
+  id: string
+  worker: Worker
+  tab: "surat" | "tiket" | "booking"
+  type: string
+  name: string
+  nim: string | null
+  prodi: string | null
+  time: string
+  mins: number
+  line: string
+  summary: string
+  checks: CheckT[]
+  attachments: { id: string; name: string; meta: string }[]
+  letter: LetterBody | null
+  timeline: { time: string; actor: string; tool: string; result: string }[]
+}
 
 const TABS = [
   ["semua", "Semua"],
@@ -23,17 +40,17 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number][0]
 
-const EDIT_LABEL = { surat: "Edit draft", helpdesk: "Balas", fasilitas: "Ubah jadwal" }
+const EDIT_LABEL: Record<Worker, string> = { surat: "Edit draft", helpdesk: "Balas", fasilitas: "Ubah jadwal" }
 
-// Catatan: editor draft, viewer PDF, dan file lampiran belum ada di demo
-const notInDemo = () => toast("Belum tersedia di demo", { description: "Butuh backend dokumen." })
+// Catatan: editor draft belum ada, fokus MVP ada di approve/reject
+const notInDemo = () => toast("Belum tersedia di versi ini", { description: "Edit draft menyusul setelah MVP." })
 
 function Metric({ label, value, note, noteClass, valueClass }: { label: string; value: React.ReactNode; note: string; noteClass?: string; valueClass?: string }) {
   return (
     <div className="flex items-end justify-between gap-3 rounded-[12px] border bg-card px-4 py-3.5">
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <span className={cn("text-[26px] font-bold leading-[30px] tracking-[-0.02em]", valueClass)}>{value}</span>
+        <span className={cn("font-mono text-[26px] font-bold leading-[30px] tracking-[-0.02em]", valueClass)}>{value}</span>
       </div>
       <span className={cn("pb-1 text-xs text-muted-foreground", noteClass)}>{note}</span>
     </div>
@@ -57,8 +74,7 @@ function Toast({ ok, title, sub, onUndo }: { ok: boolean; title: string; sub: st
   )
 }
 
-function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () => void; onReject: () => void }) {
-  const p = PEOPLE[item.person]
+function Detail({ item, busy, onApprove, onReject }: { item: QueueItem; busy: boolean; onApprove: () => void; onReject: () => void }) {
   const last = item.timeline.length - 1
   return (
     <>
@@ -67,10 +83,11 @@ function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-2.5">
             <h2 className="text-xl font-bold tracking-[-0.01em]">{item.type}</h2>
-            <StatusBadge status="pending_approval" />
+            <StatusBadge status={item.worker === "helpdesk" ? "submitted" : "pending_approval"} />
           </div>
           <span className="text-[13px] text-muted-foreground">
-            {p.name} · <span className="font-mono text-xs">{p.nim}</span> · {p.prodi} · masuk {item.time}
+            {item.name} · <span className="font-mono text-xs">{item.nim}</span> · {item.prodi} · masuk {item.time} ·{" "}
+            <span className="font-mono text-xs">{item.id}</span>
           </span>
         </div>
         <div className="flex flex-none gap-2">
@@ -78,13 +95,13 @@ function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () 
             <Pencil />
             {EDIT_LABEL[item.worker]}
           </Button>
-          <Button variant="destructive-outline" className="px-3.5" onClick={onReject}>
+          <Button variant="destructive-outline" className="px-3.5 active:scale-[0.98]" onClick={onReject} disabled={busy}>
             <X />
             Reject
           </Button>
-          <Button className="px-[18px]" onClick={onApprove}>
+          <Button className="px-[18px] active:scale-[0.98]" onClick={onApprove} disabled={busy}>
             <Check />
-            Approve
+            {item.worker === "helpdesk" ? "Teruskan" : "Approve"}
           </Button>
         </div>
       </div>
@@ -99,39 +116,38 @@ function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () 
             <p className="max-w-[640px] text-pretty text-[15px] leading-6">{item.summary}</p>
           </section>
 
-          <section className="flex flex-col gap-2.5">
-            <h3 className="text-sm font-bold">Hasil cek syarat</h3>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
-              {item.checks.map((c) => (
-                <div
-                  key={c.label}
-                  className={cn("flex items-start gap-2.5 rounded-md border px-3 py-2.5", c.ok ? "bg-card" : "border-destructive-border bg-destructive-soft/40")}
-                >
-                  <span className={cn("grid size-5 flex-none place-items-center rounded-full [&_svg]:size-3", c.ok ? "bg-ok-bg text-ok" : "bg-destructive-soft text-destructive")}>
-                    {c.ok ? <Check /> : <X />}
-                  </span>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] font-semibold">{c.label}</span>
-                    <span className={cn("text-xs", c.ok ? "text-muted-foreground" : "text-destructive")}>{c.note}</span>
+          {item.checks.length > 0 && (
+            <section className="flex flex-col gap-2.5">
+              <h3 className="text-sm font-bold">Hasil cek syarat</h3>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                {item.checks.map((c) => (
+                  <div key={c.label} className={cn("flex items-start gap-2.5 rounded-md border px-3 py-2.5", c.ok ? "bg-card" : "border-destructive-border bg-destructive-soft/40")}>
+                    <span className={cn("grid size-5 flex-none place-items-center rounded-full [&_svg]:size-3", c.ok ? "bg-ok-bg text-ok" : "bg-destructive-soft text-destructive")}>
+                      {c.ok ? <Check /> : <X />}
+                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[13px] font-semibold">{c.label}</span>
+                      <span className={cn("text-xs", c.ok ? "text-muted-foreground" : "text-destructive")}>{c.note}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
+          )}
 
           {item.attachments.length > 0 && (
             <section className="flex flex-col gap-2.5">
               <h3 className="text-sm font-bold">Lampiran</h3>
               <div className="flex flex-wrap gap-2">
                 {item.attachments.map((f) => (
-                  <button key={f.name} type="button" onClick={notInDemo} className="flex w-[260px] cursor-pointer items-center gap-3 rounded-[12px] border p-2.5 text-left hover:border-primary">
+                  <a key={f.id} href={`/api/attachments/${f.id}`} target="_blank" rel="noreferrer" className="flex w-[260px] items-center gap-3 rounded-[12px] border p-2.5 hover:border-primary">
                     <div className="relative flex h-[60px] w-12 flex-none flex-col gap-[3px] rounded-[6px] border bg-background px-[5px] py-1.5">
                       <span className="h-1.5 w-[70%] rounded-[1px] bg-dash" />
                       <span className="h-0.5 bg-input" />
                       <span className="h-0.5 bg-input" />
                       <span className="h-0.5 w-[60%] bg-input" />
                       <span className="absolute bottom-1 left-1 rounded-[3px] bg-[#B3261E] px-[3px] py-px font-mono text-[7px] font-semibold text-white">
-                        {f.name.split(".").pop()?.toUpperCase()}
+                        {f.meta.split(" ")[0]}
                       </span>
                     </div>
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -139,48 +155,23 @@ function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () 
                       <span className="text-xs text-muted-foreground">{f.meta}</span>
                     </div>
                     <ExternalLink className="size-4 flex-none text-muted-foreground" />
-                  </button>
+                  </a>
                 ))}
               </div>
             </section>
           )}
 
-          {item.pdf && (
+          {item.letter && (
             <section className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold">Preview draft surat</h3>
-                <button type="button" onClick={notInDemo} className="flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-primary hover:text-primary-hover">
+                <a href={`/surat/${item.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:text-primary-hover">
                   <Maximize2 className="size-3.5" />
                   Buka PDF
-                </button>
+                </a>
               </div>
               <div className="flex justify-center rounded-[12px] bg-muted p-6">
-                {/* kertas A4, selalu putih; kop/logo/TTD placeholder */}
-                <div className="flex aspect-[1/1.414] w-[420px] flex-col gap-2.5 bg-white px-9 py-[34px] font-serif text-[#16181A] shadow-[0_1px_3px_rgba(22,24,26,.12),0_12px_32px_-16px_rgba(22,24,26,.25)]">
-                  <div className="flex items-center gap-2.5 border-b-2 border-[#16181A] pb-2.5">
-                    <span className="grid size-[30px] place-items-center rounded-[4px] border border-dashed border-[#8B8F95] font-mono text-[6px] text-[#6F737A]">LOGO</span>
-                    <div className="flex flex-col gap-px">
-                      <span className="text-[10px] font-bold tracking-[.04em]">FAKULTAS (NAMA INSTANSI)</span>
-                      <span className="text-[7.5px] text-[#5C6066]">Alamat instansi · kop surat placeholder</span>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 flex flex-col gap-0.5 text-center">
-                    <span className="text-[11px] font-bold tracking-[.04em] underline">{item.pdf.title}</span>
-                    <span className="text-[8px] text-[#5C6066]">Nomor: terbit setelah disetujui</span>
-                  </div>
-                  <p className="mt-1.5 text-justify text-[8.5px] leading-[13px]">{item.pdf.body1}</p>
-                  <div className="grid grid-cols-[70px_1fr] gap-x-2 gap-y-0.5 pl-3 text-[8.5px] leading-[13px]">
-                    <span>Nama</span><span>: {p.name}</span>
-                    <span>NIM</span><span>: {p.nim}</span>
-                    <span>Program studi</span><span>: {p.prodi}</span>
-                  </div>
-                  <p className="text-justify text-[8.5px] leading-[13px]">{item.pdf.body2}</p>
-                  <div className="mt-auto flex w-[130px] flex-col gap-[3px] self-end text-[8.5px] leading-3">
-                    <span>Kepala Layanan Akademik,</span>
-                    <span className="grid h-[30px] place-items-center rounded-[3px] border border-dashed border-[#8561DE] font-sans text-[7px] font-semibold text-[#6A45C4]">TTD setelah approve</span>
-                    <span className="font-bold">(Nama pejabat)</span>
-                  </div>
-                </div>
+                <LetterPaper letter={item.letter} student={item} />
               </div>
             </section>
           )}
@@ -205,6 +196,7 @@ function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () 
                   <div className="flex items-baseline gap-2">
                     <span className="font-mono text-xs text-muted-foreground">{t.time}</span>
                     <span className="truncate font-mono text-[13px] font-semibold">{t.tool}</span>
+                    {t.actor !== "agent" && <span className="text-[11px] font-semibold uppercase text-muted-foreground">{t.actor}</span>}
                   </div>
                   <span className="text-[13px] leading-[18px] text-soft-foreground">{t.result}</span>
                 </div>
@@ -226,44 +218,95 @@ function Detail({ item, onApprove, onReject }: { item: QueueItem; onApprove: () 
   )
 }
 
+function QueueSkeleton() {
+  return (
+    <div aria-label="Memuat antrean">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3 border-b px-4 py-3.5">
+          <span className="size-8 animate-pulse rounded-[9px] bg-muted" />
+          <span className="flex flex-col gap-2">
+            <span className="h-3.5 w-2/3 animate-pulse rounded bg-muted" />
+            <span className="h-3 w-full animate-pulse rounded bg-muted" />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function StaffConsole() {
-  const { decisions, decide, undo } = useStore()
-  const live = QUEUE.filter((q) => !decisions[q.id])
+  const [items, setItems] = useState<QueueItem[] | null>(null)
+  const [loadError, setLoadError] = useState("")
   const [tab, setTab] = useState<Tab>("semua")
-  const [selected, setSelected] = useState<string | null>(() => live[0]?.id ?? null)
+  const [selected, setSelected] = useState<string | null>(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [reason, setReason] = useState("")
+  const [busy, setBusy] = useState(false)
 
+  const load = useCallback(
+    () =>
+      api<QueueItem[]>("/staff/queue").then(
+        (xs) => {
+          setItems(xs)
+          setLoadError("")
+        },
+        (e: Error) => setLoadError(e.message),
+      ),
+    [],
+  )
+
+  useEffect(() => {
+    load()
+    // Item baru dari agent muncul tanpa reload halaman.
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 5000)
+    return () => clearInterval(t)
+  }, [load])
+
+  const live = items ?? []
   const visible = live.filter((q) => tab === "semua" || q.tab === tab)
-  const cur = live.find((q) => q.id === selected)
-  const first = cur ? PEOPLE[cur.person].name.split(" ")[0] : "mahasiswa"
+  const cur = visible.find((q) => q.id === selected) ?? visible[0]
+  const first = cur?.name.split(" ")[0] ?? "mahasiswa"
   const oldest = Math.max(0, ...live.map((q) => q.mins))
   const counts = { semua: live.length, surat: 0, tiket: 0, booking: 0 }
   live.forEach((q) => counts[q.tab]++)
 
-  function finish(kind: "ok" | "no") {
+  async function decide(approve: boolean) {
     if (!cur) return
-    const name = PEOPLE[cur.person].name.split(" ")[0]
-    decide(cur.id, { kind, reason: kind === "no" ? reason.trim() : undefined })
-    setSelected(visible.find((q) => q.id !== cur.id)?.id ?? null)
-    setRejectOpen(false)
-    setReason("")
-    const id = cur.id
-    toast.custom(
-      (t) => (
-        <Toast
-          ok={kind === "ok"}
-          title={`${cur.type} ${name} ${kind === "ok" ? "disetujui" : "ditolak"}`}
-          sub={kind === "ok" ? cur.toastSub : `Alasan sudah dikirim ke ${name} lewat chat.`}
-          onUndo={() => {
-            toast.dismiss(t)
-            undo(id)
-            setSelected(id)
-          }}
-        />
-      ),
-      { duration: 6000 },
-    )
+    setBusy(true)
+    try {
+      const id = cur.id
+      const next = visible.find((q) => q.id !== id)?.id ?? null
+      const res = await post<{ title: string; sub: string }>(`/staff/requests/${id}/decide`, { approve, reason: approve ? undefined : reason.trim() })
+      setRejectOpen(false)
+      setReason("")
+      setSelected(next)
+      setItems((xs) => xs?.filter((x) => x.id !== id) ?? xs)
+      toast.custom(
+        (t) => (
+          <Toast
+            ok={approve}
+            title={res.title}
+            sub={res.sub}
+            onUndo={async () => {
+              toast.dismiss(t)
+              try {
+                await post(`/staff/requests/${id}/undo`)
+                setSelected(id)
+                load()
+              } catch (e) {
+                toast.error((e as Error).message)
+              }
+            }}
+          />
+        ),
+        { duration: 6000 },
+      )
+    } catch (e) {
+      toast.error((e as Error).message)
+      load()
+    } finally {
+      setBusy(false)
+    }
   }
 
   const chips = [
@@ -273,28 +316,29 @@ export function StaffConsole() {
   ]
 
   return (
-    <div className="flex min-h-screen min-w-[1280px] flex-col">
+    <div className="flex min-h-[100dvh] min-w-[1280px] flex-col">
       <TopBar section="Staff Console" themeToggle />
 
       <div className="grid flex-none grid-cols-4 gap-3 px-6 pt-5">
+        {/* Catatan: tiga metrik pertama masih angka desain, dihitung dari audit log di hari 4 */}
         <Metric label="Permintaan hari ini" value="38" note="Surat 17 · Tiket 12 · Booking 9" />
-        <Metric label="Rata-rata waktu proses" value={<>6<span className="ml-[3px] text-[15px] font-semibold text-muted-foreground">mnt</span></>} note="masuk sampai siap diputuskan" />
+        <Metric label="Rata-rata waktu proses" value={<>6<span className="ml-[3px] font-sans text-[15px] font-semibold text-muted-foreground">mnt</span></>} note="masuk sampai siap diputuskan" />
         <Metric label="Selesai otomatis" value="68%" note="26 dari 38 tanpa staf" noteClass="font-semibold text-ok" />
         <Metric
           label="Menunggu persetujuan"
-          value={live.length}
+          value={items ? live.length : "–"}
           valueClass="text-violet"
           note={live.length === 0 ? "tidak ada antrean" : oldest >= 600 ? "tertua sejak kemarin" : `tertua ${oldest} menit`}
         />
       </div>
 
-      <div className="grid h-[max(720px,calc(100vh-160px))] flex-1 grid-cols-[400px_minmax(0,1fr)] gap-4 px-6 pb-6 pt-4">
+      <div className="grid h-[max(720px,calc(100dvh-160px))] flex-1 grid-cols-[400px_minmax(0,1fr)] gap-4 px-6 pb-6 pt-4">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
           <Tabs
             value={tab}
             onValueChange={(v) => {
               setTab(v as Tab)
-              setSelected(live.find((q) => v === "semua" || q.tab === v)?.id ?? null)
+              setSelected(null)
             }}
             className="gap-3 border-b px-4 pt-4"
           >
@@ -313,12 +357,7 @@ export function StaffConsole() {
                   className="h-[38px] flex-none gap-1.5 rounded-none px-2.5 text-[13px] font-semibold text-muted-foreground after:hidden data-[state=active]:text-foreground data-[state=active]:shadow-[inset_0_-2px_0_var(--primary)]! dark:data-[state=active]:border-transparent"
                 >
                   {label}
-                  <span
-                    className={cn(
-                      "inline-grid h-[18px] min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold",
-                      tab === k ? "bg-ink text-ink-foreground" : "bg-muted text-muted-foreground",
-                    )}
-                  >
+                  <span className={cn("inline-grid h-[18px] min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold", tab === k ? "bg-ink text-ink-foreground" : "bg-muted text-muted-foreground")}>
                     {counts[k]}
                   </span>
                 </TabsTrigger>
@@ -327,8 +366,15 @@ export function StaffConsole() {
           </Tabs>
 
           <div className="min-h-0 flex-1 overflow-auto">
+            {loadError && (
+              <div role="alert" className="flex items-start gap-2 border-b bg-destructive-soft/60 px-4 py-2.5 text-[13px] text-destructive">
+                <CircleAlert className="mt-px size-4 flex-none" />
+                {loadError}
+              </div>
+            )}
+            {items === null && !loadError && <QueueSkeleton />}
             {visible.map((q) => {
-              const on = q.id === selected
+              const on = q.id === cur?.id
               return (
                 <button
                   key={q.id}
@@ -343,7 +389,7 @@ export function StaffConsole() {
                   <WorkerTile worker={q.worker} size={32} />
                   <span className="flex min-w-0 flex-col gap-[3px]">
                     <span className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold">{PEOPLE[q.person].name}</span>
+                      <span className="text-sm font-semibold">{q.name}</span>
                       <span className="whitespace-nowrap text-xs text-muted-foreground">{q.time}</span>
                     </span>
                     <span className="text-xs font-semibold" style={{ color: `var(--worker-${q.worker})` }}>{q.type}</span>
@@ -352,7 +398,7 @@ export function StaffConsole() {
                 </button>
               )
             })}
-            {visible.length === 0 && (
+            {items !== null && visible.length === 0 && (
               <div className="flex flex-col items-center gap-3 px-8 py-16 text-center">
                 <span className="grid size-12 place-items-center rounded-lg bg-accent text-primary">
                   <Inbox className="size-6" />
@@ -361,19 +407,6 @@ export function StaffConsole() {
                 <span className="max-w-[260px] text-pretty text-[13px] leading-[19px] text-muted-foreground">
                   Semua permintaan sudah diputuskan. Item baru dari agent akan muncul di sini.
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-1"
-                  onClick={() => {
-                    QUEUE.forEach((q) => undo(q.id))
-                    setTab("semua")
-                    setSelected(QUEUE[0].id)
-                  }}
-                >
-                  <RotateCcw className="size-3.5" />
-                  Muat ulang demo
-                </Button>
               </div>
             )}
           </div>
@@ -381,7 +414,7 @@ export function StaffConsole() {
 
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
           {cur ? (
-            <Detail item={cur} onApprove={() => finish("ok")} onReject={() => setRejectOpen(true)} />
+            <Detail key={cur.id} item={cur} busy={busy} onApprove={() => decide(true)} onReject={() => setRejectOpen(true)} />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-10 text-center text-muted-foreground">
               <span className="grid size-12 place-items-center rounded-lg bg-muted">
@@ -433,7 +466,7 @@ export function StaffConsole() {
             <Button variant="ghost" className="px-3.5" onClick={() => setRejectOpen(false)}>
               Batal
             </Button>
-            <Button variant="destructive" disabled={!reason.trim()} onClick={() => finish("no")}>
+            <Button variant="destructive" disabled={!reason.trim() || busy} onClick={() => decide(false)}>
               Tolak permintaan
             </Button>
           </div>

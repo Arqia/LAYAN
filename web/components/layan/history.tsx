@@ -1,13 +1,25 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { ArrowLeft, FileText, MessageCircle, Wrench } from "lucide-react"
+import { ArrowLeft, CircleAlert, FileText, Inbox, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { HISTORY, STATUS_LABEL, type HistoryItem, type Status } from "@/lib/data"
+import { api } from "@/lib/api"
+import { STATUS_LABEL, type Status, type Worker } from "@/lib/data"
 import { StatusBadge, WorkerTile } from "./primitives"
-import { useStore } from "./store"
+
+type Item = { id: string; worker: Worker; title: string; status: Status; time: string; meta: string; active: boolean }
+type Detail = {
+  id: string
+  worker: Worker
+  title: string
+  status: Status
+  fields: [string, string][]
+  steps: Partial<Record<Status, string>>
+  letter: unknown
+  reject_reason: string | null
+}
 
 function Frame({ title, back, children, footer }: { title: string; back: string; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -24,35 +36,40 @@ function Frame({ title, back, children, footer }: { title: string; back: string;
   )
 }
 
-/** Status Surat Dispensasi Raka mengikuti keputusan staf di Staff Console. */
-function useLiveStatus(item: HistoryItem): Status {
-  const { decisions } = useStore()
-  const d = decisions.r1
-  if (item.id !== "REQ-2026-0931" || !d) return item.status
-  return d.kind === "ok" ? "approved" : "rejected"
+function useApi<T>(path: string) {
+  const [data, setData] = useState<T | null>(null)
+  const [error, setError] = useState("")
+  useEffect(() => {
+    api<T>(path).then(setData, (e: Error) => setError(e.message))
+  }, [path])
+  return { data, error }
 }
 
-function Row({ item, first }: { item: HistoryItem; first: boolean }) {
-  const status = useLiveStatus(item)
+function ErrorLine({ message }: { message: string }) {
   return (
-    <Link href={`/riwayat/${item.id}`} className={cn("flex items-start gap-3 p-3.5 hover:bg-background", !first && "border-t")}>
-      <WorkerTile worker={item.worker} icon={item.icon === "wrench" ? Wrench : undefined} size={36} />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[15px] font-semibold leading-5">{item.title}</span>
-          <span className="whitespace-nowrap text-xs text-muted-foreground">{item.time}</span>
-        </div>
-        <span className="text-[13px] leading-[18px] text-muted-foreground">{item.meta}</span>
-        <StatusBadge status={status} />
-      </div>
-    </Link>
+    <p role="alert" className="m-4 flex items-start gap-2 rounded-md bg-destructive-soft/60 px-3 py-2.5 text-[13px] text-destructive">
+      <CircleAlert className="mt-px size-4 flex-none" />
+      {message}
+    </p>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div className="flex flex-col gap-2 px-4 pt-3" aria-label="Memuat riwayat">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="h-[92px] animate-pulse rounded-lg bg-muted" />
+      ))}
+    </div>
   )
 }
 
 export function HistoryList() {
+  const { data, error } = useApi<Item[]>("/requests")
   const [filter, setFilter] = useState<"semua" | "aktif" | "selesai">("semua")
-  const active = HISTORY.filter((h) => h.active)
-  const done = HISTORY.filter((h) => !h.active)
+  const items = data ?? []
+  const active = items.filter((h) => h.active)
+  const done = items.filter((h) => !h.active)
   const groups = [
     { label: "Aktif", items: active, show: filter !== "selesai" },
     { label: "Selesai", items: done, show: filter !== "aktif" },
@@ -62,6 +79,7 @@ export function HistoryList() {
     { key: "aktif", label: "Aktif", count: active.length },
     { key: "selesai", label: "Selesai" },
   ] as const
+
   return (
     <Frame title="Riwayat permintaan" back="/">
       <div className="flex gap-2 px-4 pb-3 pt-1">
@@ -81,17 +99,45 @@ export function HistoryList() {
           </button>
         ))}
       </div>
+      {error && <ErrorLine message={error} />}
+      {!data && !error && <ListSkeleton />}
+      {data && items.length === 0 && (
+        <div className="flex flex-col items-center gap-3 px-8 py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-lg bg-accent text-primary">
+            <Inbox className="size-6" />
+          </span>
+          <span className="text-base font-bold">Belum ada permintaan</span>
+          <span className="max-w-[260px] text-pretty text-[13px] leading-[19px] text-muted-foreground">
+            Minta surat atau tanya aturan akademik lewat chat. Semuanya tercatat di sini.
+          </span>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/">Buka chat</Link>
+          </Button>
+        </div>
+      )}
       <div className="flex flex-col gap-2 px-4 pb-4 pt-1">
-        {groups.filter((g) => g.show).map((g) => (
-          <div key={g.label} className="contents">
-            <span className="px-1 pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">{g.label}</span>
-            <div className="overflow-hidden rounded-lg border bg-card">
-              {g.items.map((it, i) => (
-                <Row key={it.id} item={it} first={i === 0} />
-              ))}
+        {groups
+          .filter((g) => g.show && g.items.length > 0)
+          .map((g) => (
+            <div key={g.label} className="contents">
+              <span className="px-1 pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">{g.label}</span>
+              <div className="overflow-hidden rounded-lg border bg-card">
+                {g.items.map((it, i) => (
+                  <Link key={it.id} href={`/riwayat/${it.id}`} className={cn("flex items-start gap-3 p-3.5 hover:bg-background", i > 0 && "border-t")}>
+                    <WorkerTile worker={it.worker} size={36} />
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[15px] font-semibold leading-5">{it.title}</span>
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">{it.time}</span>
+                      </div>
+                      <span className="text-[13px] leading-[18px] text-muted-foreground">{it.meta}</span>
+                      <StatusBadge status={it.status} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
     </Frame>
   )
@@ -101,32 +147,30 @@ export function HistoryList() {
 
 const STEPS: { status: Status; note: string }[] = [
   { status: "submitted", note: "Lewat chat LAYAN" },
-  { status: "needs_info", note: "Nama kegiatan, mata kuliah, bukti kegiatan" },
-  { status: "processing", note: "Syarat lolos, draft surat dibuat" },
-  { status: "pending_approval", note: "Di Ibu Sari, Layanan Akademik. Biasanya selesai di hari yang sama." },
+  { status: "needs_info", note: "Data kegiatan dan bukti kegiatan" },
+  { status: "processing", note: "Syarat dicek, draft surat dibuat" },
+  { status: "pending_approval", note: "Di staf Layanan Akademik. Biasanya selesai di hari yang sama." },
   { status: "approved", note: "Nomor surat terbit" },
   { status: "done", note: "PDF siap diunduh" },
 ]
-const TIMES = ["09.10", "09.10", "09.15", "09.15"]
-
-// Hanya permintaan utama demo yang punya data kegiatan lengkap.
-const DETAIL: Record<string, [string, string][]> = {
-  "REQ-2026-0931": [["Kegiatan", "Gemastik 2026"], ["Tanggal", "10–12 Oktober 2026"], ["Mata kuliah", "Struktur Data, Sistem Digital"]],
-}
+const TICKET_STEPS: { status: Status; note: string }[] = [
+  { status: "submitted", note: "Diteruskan ke unit terkait" },
+  { status: "approved", note: "Ditindaklanjuti unit" },
+]
 
 export function HistoryDetail({ id }: { id: string }) {
-  const item = HISTORY.find((h) => h.id === id)
-  const status = useLiveStatus(item ?? HISTORY[0])
-  if (!item)
+  const { data: d, error } = useApi<Detail>(`/requests/${encodeURIComponent(id)}`)
+  if (error || !d)
     return (
       <Frame title="Detail permintaan" back="/riwayat">
-        <p className="p-4 text-sm text-muted-foreground">Permintaan {id} tidak ditemukan.</p>
+        {error ? <ErrorLine message={error} /> : <ListSkeleton />}
       </Frame>
     )
 
-  const rejected = status === "rejected"
-  const cur = rejected ? 4 : STEPS.findIndex((s) => s.status === status)
-  const kv = DETAIL[item.id] ?? [["Keterangan", item.meta]]
+  const steps = d.worker === "helpdesk" ? TICKET_STEPS : STEPS
+  const rejected = d.status === "rejected"
+  const cur = rejected ? steps.findIndex((s) => s.status === "approved") : steps.findIndex((s) => s.status === d.status)
+  const hasLetter = !!d.letter
 
   return (
     <Frame
@@ -134,9 +178,18 @@ export function HistoryDetail({ id }: { id: string }) {
       back="/riwayat"
       footer={
         <div className="grid flex-none grid-cols-2 gap-2 border-t px-4 py-3">
-          <Button variant="outline" size="lg" disabled={item.worker !== "surat"}>
-            <FileText />
-            Lihat draft
+          <Button variant="outline" size="lg" disabled={!hasLetter} asChild={hasLetter}>
+            {hasLetter ? (
+              <Link href={`/surat/${d.id}`}>
+                <FileText />
+                {d.status === "approved" ? "Unduh surat" : "Lihat draft"}
+              </Link>
+            ) : (
+              <span>
+                <FileText />
+                Lihat draft
+              </span>
+            )}
           </Button>
           <Button variant="outline" size="lg" asChild>
             <Link href="/">
@@ -150,15 +203,15 @@ export function HistoryDetail({ id }: { id: string }) {
       <div className="flex flex-col gap-4 px-4 pb-4 pt-2">
         <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
           <div className="flex items-center gap-3">
-            <WorkerTile worker={item.worker} icon={item.icon === "wrench" ? Wrench : undefined} size={40} />
+            <WorkerTile worker={d.worker} size={40} />
             <div className="flex flex-1 flex-col gap-0.5">
-              <span className="text-[17px] font-bold">{item.title}</span>
-              <span className="font-mono text-xs text-muted-foreground">{item.id}</span>
+              <span className="text-[17px] font-bold">{d.title}</span>
+              <span className="font-mono text-xs text-muted-foreground">{d.id}</span>
             </div>
           </div>
-          <StatusBadge status={status} />
+          <StatusBadge status={d.status} />
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 border-t pt-3 text-sm">
-            {kv.map(([k, v]) => (
+            {d.fields.map(([k, v]) => (
               <div key={k} className="contents">
                 <span className="text-muted-foreground">{k}</span>
                 <span className="font-medium">{v}</span>
@@ -170,10 +223,9 @@ export function HistoryDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-3.5 rounded-lg border bg-card px-4 pb-1 pt-4">
           <span className="text-sm font-bold">Status</span>
           <ol className="flex flex-col">
-            {STEPS.map((s, i) => {
-              const state = i < cur || (i === cur && status === "done") ? "done" : i === cur ? "current" : "todo"
-              const label = rejected && i === 4 ? STATUS_LABEL.rejected : STATUS_LABEL[s.status]
-              const isLast = i === STEPS.length - 1
+            {steps.map((s, i) => {
+              const state = i < cur || (i === cur && d.status === "done") ? "done" : i === cur ? "current" : "todo"
+              const isReject = rejected && i === cur
               return (
                 <li key={s.status} className="grid grid-cols-[18px_minmax(0,1fr)_auto] gap-3">
                   <div className="flex flex-col items-center">
@@ -181,27 +233,20 @@ export function HistoryDetail({ id }: { id: string }) {
                       className={cn(
                         "mt-[3px] size-3.5 flex-none rounded-full border-2",
                         state === "done" && "border-primary bg-primary",
-                        state === "current" && (rejected ? "border-destructive bg-card shadow-[0_0_0_4px_var(--destructive-soft)]" : "border-violet-dot bg-card shadow-[0_0_0_4px_var(--status-pending_approval-bg)]"),
+                        state === "current" &&
+                          (isReject ? "border-destructive bg-card shadow-[0_0_0_4px_var(--destructive-soft)]" : "border-violet-dot bg-card shadow-[0_0_0_4px_var(--status-pending_approval-bg)]"),
                         state === "todo" && "border-input bg-card",
                       )}
                     />
-                    {!isLast && <span className={cn("my-0.5 w-0.5 flex-1", state === "done" ? "bg-primary" : "bg-border")} />}
+                    {i < steps.length - 1 && <span className={cn("my-0.5 w-0.5 flex-1", state === "done" ? "bg-primary" : "bg-border")} />}
                   </div>
                   <div className="flex flex-col gap-0.5 pb-4">
-                    <span
-                      className={cn(
-                        "text-sm font-semibold",
-                        state === "current" && (rejected ? "text-destructive" : "text-violet"),
-                        state === "todo" && "text-subtle-foreground",
-                      )}
-                    >
-                      {label}
+                    <span className={cn("text-sm font-semibold", state === "current" && (isReject ? "text-destructive" : "text-violet"), state === "todo" && "text-subtle-foreground")}>
+                      {isReject ? STATUS_LABEL.rejected : STATUS_LABEL[s.status]}
                     </span>
-                    {item.id === "REQ-2026-0931" && !(rejected && i === 4) && (
-                      <span className="text-[13px] leading-[18px] text-muted-foreground">{s.note}</span>
-                    )}
+                    <span className="text-[13px] leading-[18px] text-muted-foreground">{isReject ? d.reject_reason : s.note}</span>
                   </div>
-                  <span className="pt-0.5 font-mono text-xs text-muted-foreground">{item.id === "REQ-2026-0931" && TIMES[i] ? TIMES[i] : "–"}</span>
+                  <span className="pt-0.5 font-mono text-xs text-muted-foreground">{d.steps[isReject ? "rejected" : s.status] ?? "–"}</span>
                 </li>
               )
             })}
