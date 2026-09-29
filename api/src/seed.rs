@@ -18,7 +18,27 @@ const USERS: &[Row] = &[
 /// Isi akun demo dan laporan awal board teknisi, masing-masing sekali saat tabelnya kosong.
 pub async fn run(db: &SqlitePool) -> anyhow::Result<()> {
     users(db).await?;
-    reports(db).await
+    reports(db).await?;
+    fridays(db).await
+}
+
+/// Rapat dosen rutin di G2.4 tiap Jumat 13:00-15:00 (4 minggu ke depan), supaya demo
+/// "booking ruang rapat Jumat" selalu memperlihatkan bentrok + alternatif jam.
+async fn fridays(db: &SqlitePool) -> anyhow::Result<()> {
+    use crate::util::{day_of, iso, now, weekday};
+    let today = day_of(now());
+    let first = today + ((5 - weekday(today) as i64).rem_euclid(7));
+    for week in 0..4 {
+        let day = iso(first + week * 7);
+        sqlx::query(
+            "INSERT INTO bookings (room, day, start, end, status, purpose) SELECT 'G2.4', ?1, '13:00', '15:00', 'confirmed', 'Rapat dosen' \
+             WHERE NOT EXISTS (SELECT 1 FROM bookings WHERE room = 'G2.4' AND day = ?1 AND start = '13:00' AND status = 'confirmed')",
+        )
+        .bind(day)
+        .execute(db)
+        .await?;
+    }
+    Ok(())
 }
 
 // (id, status, ruang, judul, kategori, urgensi, pelapor, hari lalu, jam, teknisi)
