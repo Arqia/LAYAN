@@ -183,7 +183,7 @@ pub fn next(tr: &[Value]) -> Value {
             )
         }
         None => assistant_text(
-            "Aku bisa bantu minta surat dispensasi dan menjawab aturan akademik. Coba ceritakan lebih spesifik ya.",
+            "Aku bisa bantu surat dispensasi, aturan akademik, booking ruang, atau lapor kerusakan. Coba ceritakan lebih spesifik ya.",
         ),
 
         Some("getStudentProfile") => call(

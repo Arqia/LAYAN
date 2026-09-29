@@ -67,6 +67,8 @@ impl Llm {
             "tools": tools::definitions(),
             "tool_choice": "auto",
             "temperature": 0.2,
+            // Rem biaya: balasan dan argumen tool LAYAN selalu pendek.
+            "max_tokens": 500,
         });
         let res = client.post(url).bearer_auth(key).json(&body).send().await.context("LLM tidak bisa dihubungi")?;
         let status = res.status();
