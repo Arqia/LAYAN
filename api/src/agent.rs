@@ -122,7 +122,7 @@ pub struct Thread {
     pub request_id: Option<String>,
 }
 
-const KEEP: usize = 60;
+const KEEP: usize = 30;
 
 impl Thread {
     async fn load(db: &SqlitePool, student: &str) -> anyhow::Result<Self> {
@@ -268,7 +268,13 @@ pub async fn run(s: &AppState, me: &User, input: Input, tx: &Sender<Ev>) -> anyh
 async fn steps(cx: &mut Cx<'_>) -> anyhow::Result<()> {
     cx.status("Membaca permintaanmu", None).await;
     for _ in 0..10 {
-        let msg = cx.s.llm.next(&cx.th.transcript).await?;
+        let (msg, usage) = cx.s.llm.next(&cx.th.transcript).await?;
+        if let Some(u) = usage {
+            sqlx::query("INSERT INTO llm_usage (student_id, input, output, cached) VALUES (?1, ?2, ?3, ?4)")
+                .bind(&cx.me.id).bind(u.input).bind(u.output).bind(u.cached)
+                .execute(&cx.s.db)
+                .await?;
+        }
         let calls = msg["tool_calls"].as_array().cloned().unwrap_or_default();
         cx.th.transcript.push(msg.clone());
 
@@ -280,6 +286,7 @@ async fn steps(cx: &mut Cx<'_>) -> anyhow::Result<()> {
         }
 
         let mut paused = false;
+        let mut last: Option<String> = None;
         for c in calls {
             let id = c["id"].as_str().unwrap_or_default().to_owned();
             let name = c["function"]["name"].as_str().unwrap_or_default().to_owned();
@@ -292,7 +299,12 @@ async fn steps(cx: &mut Cx<'_>) -> anyhow::Result<()> {
             let (label, step) = tools::status_for(&name);
             cx.status(label, step).await;
             match tools::exec(cx, &name, &args).await {
-                Ok(Outcome::Done(v)) => cx.th.transcript.push(llm::tool_result(&id, &v)),
+                Ok(Outcome::Done(v)) => {
+                    cx.th.transcript.push(llm::tool_result(&id, &v));
+                    if tools::FINAL.contains(&name.as_str()) {
+                        last = Some(name);
+                    }
+                }
                 Ok(Outcome::Pause(message_id)) => {
                     cx.th.pending = Some(Pending { call_id: id, tool: name, message_id });
                     paused = true;
@@ -302,6 +314,15 @@ async fn steps(cx: &mut Cx<'_>) -> anyhow::Result<()> {
             }
         }
         if paused {
+            return Ok(());
+        }
+        // Alur selesai dan card sudah tampil: tidak perlu memanggil LLM lagi hanya untuk menutup.
+        // Transcript dikosongkan supaya permintaan berikutnya tidak mengirim ulang riwayat lama,
+        // kecuali jawaban KB: tombol "Buat tiket" masih butuh pertanyaan terakhirnya.
+        if let Some(name) = last {
+            if name != "answerWithCitation" {
+                cx.th.transcript.clear();
+            }
             return Ok(());
         }
     }

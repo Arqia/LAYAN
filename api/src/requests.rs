@@ -457,11 +457,25 @@ pub async fn metrics(State(s): State<AppState>, me: CurrentUser) -> Result<Json<
         saved += n * minutes;
     }
 
+    let (calls, input, output, cached): (i64, i64, i64, i64) =
+        sqlx::query_as("SELECT COUNT(*), COALESCE(SUM(input), 0), COALESCE(SUM(output), 0), COALESCE(SUM(cached), 0) FROM llm_usage WHERE at >= ?1")
+            .bind(t0)
+            .fetch_one(&s.db)
+            .await?;
+
     // Selesai otomatis: dijawab dengan sumber, laporan langsung ke teknisi, atau ditahan dengan alasan jelas.
     let auto = jawaban + laporan + ditahan;
     let handled = auto + ke_staf;
+    let total = surat + tiket + laporan + booking + jawaban;
     Ok(Json(json!({
-        "total": surat + tiket + laporan + booking + jawaban,
+        "tokens": {
+            "calls": calls,
+            "input": input,
+            "output": output,
+            "cache_pct": if input > 0 { cached * 100 / input } else { 0 },
+            "per_request": if total > 0 { (input + output) / total } else { 0 },
+        },
+        "total": total,
         "by": { "surat": surat, "tiket": tiket, "booking": booking, "laporan": laporan, "jawaban": jawaban },
         "avg_minutes": avg.map(|s| ((s / 60.0).round() as i64).max(1)),
         "auto": auto,

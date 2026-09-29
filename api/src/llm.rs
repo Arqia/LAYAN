@@ -33,32 +33,33 @@ impl Llm {
         }
     }
 
-    /// Satu langkah agent: kirim transcript, terima pesan assistant (teks dan/atau tool_calls).
+    /// Satu langkah agent: kirim transcript, terima pesan assistant (teks dan/atau tool_calls)
+    /// plus token yang terpakai (None kalau dikerjakan mock).
     /// Kalau provider error atau lewat 20 detik, langkah ini dikerjakan mock supaya layanan tidak macet.
-    pub async fn next(&self, transcript: &[Value]) -> anyhow::Result<Value> {
+    pub async fn next(&self, transcript: &[Value]) -> anyhow::Result<(Value, Option<Usage>)> {
         let Self::Http { url, key, model, client } = self else {
             tokio::time::sleep(std::time::Duration::from_millis(700)).await;
-            return Ok(mock::next(transcript));
+            return Ok((mock::next(transcript), None));
         };
         match Self::call(url, key, model, client, transcript).await {
             // LLM kadang diam di tengah alur. Kalau aturan mock tahu langkah berikutnya, pakai itu.
-            Ok(m) if m["tool_calls"].as_array().is_none_or(|c| c.is_empty()) && m["content"].as_str().is_none_or(|t| t.trim().is_empty()) => {
+            Ok((m, u)) if m["tool_calls"].as_array().is_none_or(|c| c.is_empty()) && m["content"].as_str().is_none_or(|t| t.trim().is_empty()) => {
                 let fallback = mock::next(transcript);
                 if fallback["tool_calls"].is_array() {
                     eprintln!("LLM diam di tengah alur, langkah ini dilanjutkan mock");
-                    return Ok(fallback);
+                    return Ok((fallback, Some(u)));
                 }
-                Ok(m)
+                Ok((m, Some(u)))
             }
-            Ok(m) => Ok(m),
+            Ok((m, u)) => Ok((m, Some(u))),
             Err(e) => {
                 eprintln!("LLM gagal, langkah ini pakai mock: {e:#}");
-                Ok(mock::next(transcript))
+                Ok((mock::next(transcript), None))
             }
         }
     }
 
-    async fn call(url: &str, key: &str, model: &str, client: &reqwest::Client, transcript: &[Value]) -> anyhow::Result<Value> {
+    async fn call(url: &str, key: &str, model: &str, client: &reqwest::Client, transcript: &[Value]) -> anyhow::Result<(Value, Usage)> {
         let mut messages = vec![json!({ "role": "system", "content": tools::system_prompt() })];
         messages.extend_from_slice(transcript);
         let body = json!({
@@ -91,8 +92,17 @@ impl Llm {
                 }
             }
         }
-        Ok(msg)
+        let u = &v["usage"];
+        let n = |x: &Value| x.as_i64().unwrap_or(0);
+        let usage = Usage { input: n(&u["prompt_tokens"]), output: n(&u["completion_tokens"]), cached: n(&u["prompt_tokens_details"]["cached_tokens"]) };
+        Ok((msg, usage))
     }
+}
+
+pub struct Usage {
+    pub input: i64,
+    pub output: i64,
+    pub cached: i64,
 }
 
 /* ---------- builder pesan (dipakai agent dan mock) ---------- */

@@ -50,6 +50,7 @@ type Metrics = {
   handled: number
   auto_pct: number
   saved_minutes: number
+  tokens: { calls: number; input: number; output: number; cache_pct: number; per_request: number }
 }
 
 const hours = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1).replace(".", ",")} jam` : `${m} mnt`)
@@ -342,7 +343,7 @@ export function StaffConsole() {
     <div className="flex min-h-[100dvh] min-w-[1280px] flex-col">
       <TopBar section="Staff Console" themeToggle />
 
-      <div className="grid flex-none grid-cols-5 gap-3 px-6 pt-5">
+      <div className="grid flex-none grid-cols-6 gap-3 px-6 pt-5">
         <Metric
           label="Permintaan hari ini"
           value={metrics?.total ?? "–"}
@@ -360,6 +361,11 @@ export function StaffConsole() {
           noteClass="font-semibold text-ok"
         />
         <Metric label="Waktu staf dihemat" value={metrics ? hours(metrics.saved_minutes) : "–"} note="estimasi dari audit log" valueClass="text-primary" />
+        <Metric
+          label="Token AI per permintaan"
+          value={metrics?.tokens.per_request ? metrics.tokens.per_request.toLocaleString("id-ID") : "–"}
+          note={metrics ? `${metrics.tokens.calls} panggilan LLM${metrics.tokens.cache_pct > 0 ? ` · ${metrics.tokens.cache_pct}% dari cache` : ""}` : ""}
+        />
         <Metric
           label="Menunggu persetujuan"
           value={items ? live.length : "–"}

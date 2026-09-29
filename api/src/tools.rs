@@ -151,6 +151,9 @@ pub fn definitions() -> Value {
     ])
 }
 
+/// Tool terakhir sebuah alur. Semuanya sudah menampilkan card atau pesan sendiri.
+pub const FINAL: [&str; 5] = ["submitForApproval", "createTicket", "holdRoom", "reportDamage", "answerWithCitation"];
+
 pub const DRAFT_STEPS: [&str; 3] = ["Status aktif, UKT lunas", "Menyusun draft PDF", "Kirim ke staf untuk persetujuan"];
 
 /// Label status yang tampil di chat saat tool berjalan, plus posisi di checklist draft.
