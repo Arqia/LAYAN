@@ -1,9 +1,10 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google"
 import { cookies } from "next/headers"
 import { ThemeProvider } from "next-themes"
 import { fetchMe } from "@/lib/session"
 import { StoreProvider } from "@/components/layan/store"
+import { SwRegister } from "@/components/layan/sw-register"
 import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
 
@@ -13,6 +14,14 @@ const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["lati
 export const metadata: Metadata = {
   title: "LAYAN",
   description: "Satu loket chat untuk mengurus layanan kampus sampai selesai.",
+  appleWebApp: { capable: true, title: "LAYAN", statusBarStyle: "default" },
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F7F7F5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0D0F10" },
+  ],
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -24,6 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           <StoreProvider me={me}>{children}</StoreProvider>
           <Toaster position="bottom-right" offset={24} />
+          <SwRegister />
         </ThemeProvider>
       </body>
     </html>

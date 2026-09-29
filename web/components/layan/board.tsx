@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 import type { LucideIcon } from "lucide-react"
-import { Camera, Check, ChevronDown, CircleCheck, CircleEllipsis, ListFilter, Play, Projector, Snowflake, SprayCan, Users, Wifi, Zap } from "lucide-react"
+import { Check, ChevronDown, CircleAlert, CircleCheck, CircleEllipsis, ListFilter, Play, Projector, Snowflake, SprayCan, Users, Wifi, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { REPORTS, TECHS, type Category, type Report, type ReportStatus } from "@/lib/data"
+import { api, post } from "@/lib/api"
+import { TECHS, type Category, type Report, type ReportStatus, type Tech } from "@/lib/data"
 import { AccountPill, TopBar } from "./app-bar"
 import { Mark, UrgencyBadge } from "./primitives"
 import { useStore } from "./store"
@@ -30,9 +32,9 @@ function Meta({ r, large }: { r: Report; large?: boolean }) {
         <Icon className={s} />
         {r.category}
       </span>
-      <span className={cn("flex items-center gap-1", r.reporterCount > 1 ? "font-bold text-foreground" : "font-medium")}>
+      <span className={cn("flex items-center gap-1", r.reporters > 1 ? "font-bold text-foreground" : "font-medium")}>
         <Users className={s} />
-        {r.reporterCount} pelapor
+        {r.reporters} pelapor
       </span>
       <span className="ml-auto">{r.time}</span>
     </div>
@@ -40,7 +42,8 @@ function Meta({ r, large }: { r: Report; large?: boolean }) {
 }
 
 function KanbanCard({ r, onDragStart }: { r: Report; onDragStart: () => void }) {
-  const t = TECHS[r.assignee]
+  const t = TECHS[r.assignee as Tech] ?? { bg: "var(--muted)", fg: "var(--foreground)" }
+  const initials = r.tech.split(" ").map((w) => w[0]).join("")
   return (
     <div
       draggable
@@ -60,17 +63,15 @@ function KanbanCard({ r, onDragStart }: { r: Report; onDragStart: () => void }) 
       </div>
       <span className="text-sm font-semibold leading-5">{r.title}</span>
       {r.photo && (
-        <div className="flex h-[92px] items-center justify-center gap-1.5 rounded-[8px] bg-[repeating-linear-gradient(135deg,var(--muted)_0_8px,var(--border)_8px_16px)] font-mono text-[11px] text-muted-foreground">
-          <Camera className="size-3.5" />
-          foto pelapor
-        </div>
+        // eslint-disable-next-line @next/next/no-img-element -- foto dari API Rust, bukan aset statis
+        <img src={`/api/attachments/${r.photo}`} alt={`Foto kerusakan ${r.room}`} className="h-[92px] w-full rounded-[8px] object-cover" draggable={false} />
       )}
       <Meta r={r} />
       <div className="flex items-center gap-2 border-t pt-2.5">
         <span className="grid size-[22px] place-items-center rounded-full text-[9px] font-bold" style={{ background: t.bg, color: t.fg }}>
-          {t.initials}
+          {initials}
         </span>
-        <span className="flex-1 text-xs font-medium">{t.name}</span>
+        <span className="flex-1 text-xs font-medium">{r.tech}</span>
         <span className="font-mono text-[11px] text-subtle-foreground">{r.id}</span>
       </div>
     </div>
@@ -101,14 +102,39 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
 
 export function Board() {
   const { me } = useStore()
-  const [moved, setMoved] = useState<Record<string, ReportStatus>>({})
+  const [reports, setReports] = useState<Report[] | null>(null)
+  const [error, setError] = useState("")
+  const [justDone, setJustDone] = useState<Set<string>>(new Set())
   const [scope, setScope] = useState<"semua" | "saya">("semua")
   const [cat, setCat] = useState<Category | "Semua">("Semua")
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<ReportStatus | null>(null)
 
-  const reports = REPORTS.map((r) => ({ ...r, status: moved[r.id] ?? r.status }))
-  const move = (id: string, status: ReportStatus) => setMoved((m) => ({ ...m, [id]: status }))
+  const load = useCallback(() => api<Report[]>("/reports").then(setReports, (e: Error) => setError(e.message)), [])
+  useEffect(() => {
+    load()
+    // laporan baru dari agent masuk tanpa reload
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 10000)
+    return () => clearInterval(t)
+  }, [load])
+
+  // Optimis: kartu langsung pindah, dikembalikan kalau API menolak.
+  async function move(id: string, status: ReportStatus) {
+    const before = reports
+    if (before?.find((r) => r.id === id)?.status === status) return
+    setReports((rs) => rs?.map((r) => (r.id === id ? { ...r, status } : r)) ?? rs)
+    try {
+      const res = await post<{ notified: number }>(`/reports/${id}/status`, { status })
+      if (status === "selesai") {
+        setJustDone((s) => new Set(s).add(id))
+        toast.success(`${id} selesai`, { description: res.notified ? `${res.notified} pelapor sudah dikabari lewat chat.` : "Status tersimpan." })
+      }
+    } catch (e) {
+      setReports(before)
+      toast.error((e as Error).message)
+    }
+  }
+  const all = reports ?? []
   const group = (list: Report[]) =>
     COLUMNS.map((c) => {
       const cards = list.filter((r) => r.status === c.key)
@@ -116,8 +142,8 @@ export function Board() {
       return { ...c, cards }
     })
 
-  const desktopList = reports.filter((r) => (scope === "semua" || r.assignee === me?.id) && (cat === "Semua" || r.category === cat))
-  const open = reports.filter((r) => r.status !== "selesai")
+  const desktopList = all.filter((r) => (scope === "semua" || r.assignee === me?.id) && (cat === "Semua" || r.category === cat))
+  const open = all.filter((r) => r.status !== "selesai")
 
   return (
     <>
@@ -128,7 +154,7 @@ export function Board() {
           <div className="flex flex-1 flex-col gap-0.5">
             <h1 className="text-[22px] font-bold tracking-[-0.01em]">Laporan kerusakan</h1>
             <span className="text-[13px] text-muted-foreground">
-              {open.length} laporan terbuka · {open.reduce((s, r) => s + r.reporterCount, 0)} pelapor, sudah digabung agent
+              {open.length} laporan terbuka · {open.reduce((s, r) => s + r.reporters, 0)} pelapor, sudah digabung agent
             </span>
           </div>
           <Segmented value={scope} onChange={setScope} options={[["semua", "Semua teknisi"], ["saya", "Tugas saya"]]} />
@@ -149,7 +175,13 @@ export function Board() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-3 gap-4 px-6 pb-6">
+        {error && (
+          <p role="alert" className="mx-6 mb-3 flex items-center gap-2 rounded-md bg-destructive-soft/60 px-3 py-2 text-[13px] text-destructive">
+            <CircleAlert className="size-4" />
+            {error}
+          </p>
+        )}
+        <div className={cn("grid min-h-0 flex-1 grid-cols-3 gap-4 px-6 pb-6", !reports && "animate-pulse")}>
           {group(desktopList).map((col) => (
             <section
               key={col.key}
@@ -195,7 +227,7 @@ export function Board() {
           <span className="text-[13px] text-muted-foreground">{me?.name} · {me?.unit}</span>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-4 pb-4">
-          {group(reports.filter((r) => r.assignee === me?.id)).map((g) => (
+          {group(all.filter((r) => r.assignee === me?.id)).map((g) => (
             <section key={g.key} className="flex flex-col gap-2">
               <div className="flex items-center gap-2 px-0.5">
                 <span className="size-2 rounded-full" style={{ background: g.dot }} />
@@ -225,7 +257,7 @@ export function Board() {
                   {r.status === "selesai" && (
                     <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ok">
                       <CircleCheck className="size-[15px]" />
-                      {moved[r.id] === "selesai" ? "Selesai barusan · pelapor diberi tahu" : `Selesai ${r.time}`}
+                      {justDone.has(r.id) ? "Selesai barusan · pelapor diberi tahu" : `Selesai ${r.updated}`}
                     </span>
                   )}
                 </div>

@@ -1,4 +1,1 @@
-# per-proyek: web/.gitignore dan api/.gitignore
-.claude/
-web/AGENTS.md
-web/CLAUDE.md
+# aturan per proyek ada di web/.gitignore dan api/.gitignore

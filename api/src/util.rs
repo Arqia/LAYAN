@@ -48,6 +48,72 @@ pub fn tanggal(iso: &str) -> String {
     }
 }
 
+const BULAN_PANJANG: [&str; 12] = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+pub const HARI: [&str; 7] = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+/// Nomor hari (sejak epoch) menurut WIB.
+pub fn day_of(at: i64) -> i64 {
+    (at + WIB).div_euclid(86_400)
+}
+
+/// Awal hari ini (WIB) dalam detik epoch.
+pub fn today_start() -> i64 {
+    day_of(now()) * 86_400 - WIB
+}
+
+/// 0 = Minggu. 1 Jan 1970 hari Kamis.
+pub fn weekday(days: i64) -> usize {
+    (days + 4).rem_euclid(7) as usize
+}
+
+/// Kebalikan civil(): tanggal -> nomor hari.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+pub fn iso(days: i64) -> String {
+    let (y, m, d) = civil(days);
+    format!("{y}-{m:02}-{d:02}")
+}
+
+/// "2026-10-02" -> nomor hari. None kalau format salah.
+pub fn parse_iso(s: &str) -> Option<i64> {
+    let p: Vec<i64> = s.trim().split('-').map(|x| x.parse().ok()).collect::<Option<_>>()?;
+    match p[..] {
+        [y, m @ 1..=12, d @ 1..=31] => Some(days_from_civil(y, m, d)),
+        _ => None,
+    }
+}
+
+/// "Jumat, 2 Okt"
+pub fn day_label(days: i64) -> String {
+    let (_, m, d) = civil(days);
+    format!("{}, {d} {}", HARI[weekday(days)], BULAN[m - 1])
+}
+
+/// (singkatan hari, tanggal, bulan) untuk blok kalender: ("JUM", "2", "Okt")
+pub fn day_parts(days: i64) -> (String, String, String) {
+    let (_, m, d) = civil(days);
+    (HARI[weekday(days)][..3].to_uppercase(), d.to_string(), BULAN[m - 1].to_owned())
+}
+
+/// "Selasa, 29 September 2026" untuk konteks LLM.
+pub fn today_long() -> String {
+    let t = day_of(now());
+    let (y, m, d) = civil(t);
+    format!("{}, {d} {} {y} ({})", HARI[weekday(t)], BULAN_PANJANG[m - 1], iso(t))
+}
+
+/// "13:00" -> "13.00"
+pub fn hm(s: &str) -> String {
+    s.replace(':', ".")
+}
+
 /// Hex acak kriptografis, dipakai untuk token sesi dan id lampiran.
 pub fn random_hex(bytes: usize) -> String {
     use argon2::password_hash::rand_core::{OsRng, RngCore};
@@ -67,6 +133,10 @@ mod tests {
         assert_eq!(civil(20_725), (2026, 9, 29));
         assert_eq!(tanggal("2026-08-14"), "14 Agu 2026");
         assert_eq!(tanggal("rusak"), "rusak");
+        assert_eq!(parse_iso("2026-10-02").map(day_label).as_deref(), Some("Jumat, 2 Okt"));
+        assert_eq!(parse_iso("2026-10-02").map(iso).as_deref(), Some("2026-10-02"));
+        assert_eq!(weekday(20_725), 2); // Selasa
+        assert_eq!(parse_iso("2026-13-01"), None);
     }
 }
 

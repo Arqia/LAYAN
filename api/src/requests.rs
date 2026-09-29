@@ -1,4 +1,4 @@
-//! Permintaan layanan: riwayat mahasiswa, detail (juga untuk cetak surat), dan antrean staf.
+//! Permintaan layanan: riwayat mahasiswa, detail (juga untuk cetak surat), antrean staf, dan metrik dampak.
 
 use axum::extract::{Path, State};
 use axum::Json;
@@ -10,7 +10,7 @@ use crate::agent::insert_message;
 use crate::auth::{CurrentUser, Role};
 use crate::error::AppError;
 use crate::tools::{courses, merge_data};
-use crate::util::{clock, now, when};
+use crate::util::{clock, day_label, hm, now, parse_iso, today_start, when};
 use crate::AppState;
 
 #[derive(sqlx::FromRow)]
@@ -31,6 +31,24 @@ struct Req {
 const SELECT: &str = "SELECT r.id, r.student_id, r.worker, r.title, r.status, r.summary, r.data, r.created_at, u.name, u.nim, u.prodi \
                       FROM requests r JOIN users u ON u.id = r.student_id";
 
+/// Jenis permintaan untuk tampilan: surat | tiket | booking | laporan
+fn kind(worker: &str, d: &Value) -> &'static str {
+    match worker {
+        "surat" => "surat",
+        "helpdesk" => "tiket",
+        _ if !d["report_id"].is_null() => "laporan",
+        _ => "booking",
+    }
+}
+
+/// "G1.2 · Jumat, 2 Okt, 13.00–15.00"
+fn slot(d: &Value) -> String {
+    let c = &d["chosen"];
+    let (start, end) = (c["start"].as_str().or(d["start"].as_str()).unwrap_or(""), c["end"].as_str().or(d["end"].as_str()).unwrap_or(""));
+    let day = d["date"].as_str().and_then(parse_iso).map(day_label).unwrap_or_default();
+    format!("{} · {day}, {}–{}", c["code"].as_str().unwrap_or("-"), hm(start), hm(end))
+}
+
 impl Req {
     fn data(&self) -> Value {
         serde_json::from_str(&self.data).unwrap_or(json!({}))
@@ -40,9 +58,22 @@ impl Req {
         self.name.split(' ').next().unwrap_or(&self.name)
     }
 
+    fn kind(&self, d: &Value) -> &'static str {
+        kind(&self.worker, d)
+    }
+
+    fn display_title(&self, d: &Value) -> String {
+        match self.kind(d) {
+            "tiket" => format!("Tiket {}", self.id),
+            "booking" => format!("Booking {}", d["chosen"]["code"].as_str().unwrap_or("ruang")),
+            "laporan" => self.title.trim_start_matches("Lapor: ").to_owned(),
+            _ => self.title.clone(),
+        }
+    }
+
     /// Ringkasan satu baris untuk list.
     fn line(&self, d: &Value) -> String {
-        match self.worker.as_str() {
+        match self.kind(d) {
             "surat" => {
                 let n = courses(d).len();
                 [d["activity"].as_str().unwrap_or(""), d["dates"].as_str().unwrap_or(""), &format!("{n} mata kuliah")]
@@ -51,19 +82,8 @@ impl Req {
                     .collect::<Vec<_>>()
                     .join(", ")
             }
+            "booking" => format!("{} · {} orang", slot(d), d["people"].as_i64().unwrap_or(0)),
             _ => d["question"].as_str().unwrap_or("").to_owned(),
-        }
-    }
-
-    fn fields(&self, d: &Value) -> Vec<[String; 2]> {
-        let s = |k: &str| d[k].as_str().unwrap_or("-").to_owned();
-        match self.worker.as_str() {
-            "surat" => vec![
-                ["Kegiatan".into(), s("activity")],
-                ["Tanggal".into(), s("dates")],
-                ["Mata kuliah".into(), courses(d).join(", ")],
-            ],
-            _ => vec![["Kategori".into(), s("category")], ["Unit tujuan".into(), s("unit")], ["Pertanyaan".into(), s("question")]],
         }
     }
 }
@@ -84,6 +104,17 @@ async fn audit_staf(db: &SqlitePool, r: &Req, tool: &str, result: &str) -> Resul
     Ok(())
 }
 
+/// Laporan kerusakan yang terhubung ke permintaan: (ruang, kategori, urgensi, status, teknisi, pelapor)
+async fn report_of(db: &SqlitePool, d: &Value) -> Result<Option<(String, String, String, String, String, i64)>, AppError> {
+    let Some(id) = d["report_id"].as_str() else { return Ok(None) };
+    Ok(sqlx::query_as(
+        "SELECT r.room, r.category, r.urgency, r.status, u.name, r.reporters FROM reports r JOIN users u ON u.id = r.assignee WHERE r.id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await?)
+}
+
 /* ---------- mahasiswa ---------- */
 
 /// Riwayat permintaan milik mahasiswa yang login.
@@ -94,33 +125,39 @@ pub async fn mine(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Vec
         .bind(&me.user.id)
         .fetch_all(&s.db)
         .await?;
-    Ok(Json(
-        rows.iter()
-            .map(|r| {
-                let d = r.data();
-                let meta = match (r.worker.as_str(), r.status.as_str()) {
-                    ("surat", "approved" | "done") => format!("{} · disetujui {}", d["letter_no"].as_str().unwrap_or(""), d["approved_by"].as_str().unwrap_or("staf")),
-                    (_, "rejected") => d["reject_reason"].as_str().unwrap_or("Ditolak staf").to_owned(),
-                    ("surat", "pending_approval") => format!("{} · menunggu staf", d["activity"].as_str().unwrap_or("")),
-                    ("surat", "needs_info") => "Menunggu data dari kamu".into(),
-                    ("surat", _) => "Sedang diproses agent".into(),
-                    _ => format!("{} · {}", d["category"].as_str().unwrap_or(""), d["unit"].as_str().unwrap_or("")),
-                };
-                json!({
-                    "id": r.id,
-                    "worker": r.worker,
-                    "title": if r.worker == "helpdesk" { format!("Tiket {}", r.id) } else { r.title.clone() },
-                    "status": r.status,
-                    "time": when(r.created_at),
-                    "meta": meta,
-                    "active": !matches!(r.status.as_str(), "approved" | "rejected" | "done"),
-                })
-            })
-            .collect(),
-    ))
+    let mut out = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let d = r.data();
+        let meta = match (r.kind(&d), r.status.as_str()) {
+            (_, "rejected") => d["reject_reason"].as_str().unwrap_or("Ditolak staf").to_owned(),
+            ("surat", "approved" | "done") => format!("{} · disetujui {}", d["letter_no"].as_str().unwrap_or(""), d["approved_by"].as_str().unwrap_or("staf")),
+            ("surat", "pending_approval") => format!("{} · menunggu staf", d["activity"].as_str().unwrap_or("")),
+            ("surat" | "booking", "needs_info") => "Menunggu data dari kamu".into(),
+            ("surat", _) => "Sedang diproses agent".into(),
+            ("booking", "approved") => format!("{} · terkonfirmasi", slot(&d)),
+            ("booking", _) => format!("{} · menunggu staf", slot(&d)),
+            ("laporan", _) => match report_of(&s.db, &d).await? {
+                Some((_, _, _, _, tech, n)) => format!("Ditugaskan ke {tech} · {n} pelapor"),
+                None => "Laporan kerusakan".into(),
+            },
+            ("tiket", "done") => format!("Dijawab {}", d["unit"].as_str().unwrap_or("unit")),
+            _ => format!("{} · {}", d["category"].as_str().unwrap_or(""), d["unit"].as_str().unwrap_or("")),
+        };
+        out.push(json!({
+            "id": r.id,
+            "worker": r.worker,
+            "kind": r.kind(&d),
+            "title": r.display_title(&d),
+            "status": r.status,
+            "time": when(r.created_at),
+            "meta": meta,
+            "active": !matches!(r.status.as_str(), "approved" | "rejected" | "done"),
+        }));
+    }
+    Ok(Json(out))
 }
 
-/// Detail permintaan: pemiliknya atau staf. Dipakai halaman riwayat dan cetak surat.
+/// Detail permintaan: pemiliknya atau staf. Dipakai halaman riwayat, cetak surat, dan app Android.
 #[utoipa::path(get, path = "/api/requests/{id}", params(("id" = String, Path)), responses((status = 200), (status = 404)))]
 pub async fn detail(State(s): State<AppState>, me: CurrentUser, Path(id): Path<String>) -> Result<Json<Value>, AppError> {
     let r = load(&s.db, &id).await?;
@@ -128,17 +165,46 @@ pub async fn detail(State(s): State<AppState>, me: CurrentUser, Path(id): Path<S
         return Err(AppError::NotFound);
     }
     let d = r.data();
+    let text = |k: &str| d[k].as_str().unwrap_or("-").to_owned();
+    let fields: Vec<[String; 2]> = match r.kind(&d) {
+        "surat" => vec![["Kegiatan".into(), text("activity")], ["Tanggal".into(), text("dates")], ["Mata kuliah".into(), courses(&d).join(", ")]],
+        "booking" => vec![
+            ["Ruang".into(), slot(&d)],
+            ["Keperluan".into(), text("purpose")],
+            ["Peserta".into(), format!("{} orang", d["people"].as_i64().unwrap_or(0))],
+        ],
+        "laporan" => match report_of(&s.db, &d).await? {
+            Some((room, cat, urg, _, tech, n)) => vec![
+                ["Laporan".into(), text("report_id")],
+                ["Ruang".into(), room],
+                ["Kategori".into(), format!("{cat} · urgensi {urg}")],
+                ["Teknisi".into(), tech],
+                ["Pelapor".into(), format!("{n} orang")],
+            ],
+            None => vec![],
+        },
+        _ => {
+            let mut f = vec![["Kategori".into(), text("category")], ["Unit tujuan".into(), text("unit")], ["Pertanyaan".into(), text("question")]];
+            if let Some(a) = d["answer"].as_str() {
+                f.push(["Jawaban".into(), a.to_owned()]);
+            }
+            f
+        }
+    };
 
     // Waktu tiap status versi mahasiswa (tanpa nama tool).
     let mut steps = serde_json::Map::new();
     steps.insert("submitted".into(), json!(clock(r.created_at)));
-    for (at, _, tool, _) in timeline(&s.db, &r.id).await? {
+    for (at, _, tool, result) in timeline(&s.db, &r.id).await? {
         let status = match tool.as_str() {
-            "requestLetterDetails" => "needs_info",
+            "requestLetterDetails" | "checkRoomAvailability" => "needs_info",
             "generateLetterDraft" => "processing",
             "submitForApproval" => "pending_approval",
             "approveRequest" => "approved",
-            "rejectRequest" => "rejected",
+            "replyTicket" => "done",
+            "rejectRequest" | "cancelBooking" => "rejected",
+            "updateReport" if result.starts_with("Mulai") => "processing",
+            "updateReport" if result.starts_with("Selesai") => "done",
             _ => continue,
         };
         steps.insert(status.into(), json!(clock(at)));
@@ -147,9 +213,10 @@ pub async fn detail(State(s): State<AppState>, me: CurrentUser, Path(id): Path<S
     Ok(Json(json!({
         "id": r.id,
         "worker": r.worker,
-        "title": if r.worker == "helpdesk" { format!("Tiket {}", r.id) } else { r.title.clone() },
+        "kind": r.kind(&d),
+        "title": r.display_title(&d),
         "status": r.status,
-        "fields": r.fields(&d),
+        "fields": fields,
         "steps": steps,
         "letter": d["letter"],
         "letter_no": d["letter_no"],
@@ -196,7 +263,7 @@ pub async fn queue(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Ve
         out.push(json!({
             "id": r.id,
             "worker": r.worker,
-            "tab": match r.worker.as_str() { "helpdesk" => "tiket", "fasilitas" => "booking", _ => "surat" },
+            "tab": match r.kind(&d) { "tiket" => "tiket", "booking" => "booking", _ => "surat" },
             "type": r.title,
             "name": r.name,
             "nim": r.nim,
@@ -217,10 +284,17 @@ pub async fn queue(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Ve
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct DecideReq {
     pub approve: bool,
+    /// Wajib saat menolak.
     pub reason: Option<String>,
+    /// Wajib saat menjawab tiket helpdesk.
+    pub answer: Option<String>,
 }
 
-/// Approve / reject. Hasilnya langsung dikirim ke chat mahasiswa.
+fn required(v: &Option<String>, msg: &str) -> Result<String, AppError> {
+    v.as_deref().map(str::trim).filter(|x| !x.is_empty()).map(str::to_owned).ok_or_else(|| AppError::Bad(msg.into()))
+}
+
+/// Approve / reject / jawab tiket. Hasilnya langsung dikirim ke chat mahasiswa.
 #[utoipa::path(post, path = "/api/staff/requests/{id}/decide", request_body = DecideReq, params(("id" = String, Path)), responses((status = 200)))]
 pub async fn decide(State(s): State<AppState>, me: CurrentUser, Path(id): Path<String>, Json(b): Json<DecideReq>) -> Result<Json<Value>, AppError> {
     me.require(Role::Staf)?;
@@ -231,44 +305,69 @@ pub async fn decide(State(s): State<AppState>, me: CurrentUser, Path(id): Path<S
     let d = r.data();
     let first = r.first_name().to_owned();
     let staf = me.user.name.clone();
+    let kind = r.kind(&d);
+    let at = clock(now());
 
-    let (status, text, card, patch, title, sub) = if b.approve {
-        if r.worker == "surat" {
+    // (status baru, teks chat, card, patch data, tool audit, judul toast, isi toast)
+    let (status, text, card, patch, tool, title, sub) = match (b.approve, kind) {
+        (false, _) => {
+            let reason = required(&b.reason, "Alasan penolakan wajib diisi.")?;
+            if kind == "booking" {
+                sqlx::query("UPDATE bookings SET status = 'released' WHERE request_id = ?1").bind(&r.id).execute(&s.db).await?;
+            }
+            (
+                "rejected",
+                format!("{} kamu belum disetujui staf. Alasannya: {reason}", r.display_title(&d)),
+                None,
+                json!({ "reject_reason": reason }),
+                "rejectRequest",
+                format!("{} {first} ditolak", r.title),
+                format!("Alasan sudah dikirim ke {first} lewat chat."),
+            )
+        }
+        (true, "surat") => {
             let (ym, n): (String, i64) = sqlx::query_as(
                 "SELECT strftime('%Y/%m', 'now', '+7 hours'), (SELECT COUNT(*) FROM requests WHERE json_extract(data, '$.letter_no') IS NOT NULL)",
             )
             .fetch_one(&s.db)
             .await?;
             let no = format!("SD/{ym}/{:04}", 142 + n);
-            let at = clock(now());
             (
                 "approved",
                 format!("{} kamu sudah disetujui. Semangat lombanya!", r.title),
                 Some(json!({ "kind": "done", "state": "active", "data": { "letter_no": no, "title": r.title, "approved_by": staf, "approved_at": at, "request_id": r.id } })),
                 json!({ "letter_no": no, "approved_by": staf, "approved_at": at }),
+                "approveRequest",
                 format!("{} {first} disetujui", r.title),
                 format!("Nomor {no} terbit. {first} sudah diberi tahu lewat chat."),
             )
-        } else {
+        }
+        (true, "booking") => {
+            sqlx::query("UPDATE bookings SET status = 'confirmed' WHERE request_id = ?1").bind(&r.id).execute(&s.db).await?;
+            let code = d["chosen"]["code"].as_str().unwrap_or("Ruang").to_owned();
             (
                 "approved",
-                format!("Tiket {} sudah ditindaklanjuti {}. Jawaban lengkapnya menyusul dari unit terkait.", r.id, d["unit"].as_str().unwrap_or("unit terkait")),
+                format!("Booking {} sudah dikonfirmasi {staf}. Sampai jumpa di ruangan!", slot(&d)),
                 None,
-                json!({ "approved_by": staf }),
-                format!("{} {first} diteruskan", r.title),
-                format!("Tiket diteruskan. {first} sudah diberi tahu lewat chat."),
+                json!({ "approved_by": staf, "approved_at": at }),
+                "approveRequest",
+                format!("Booking {code} {first} dikonfirmasi"),
+                format!("{code} terkonfirmasi. {first} sudah diberi tahu lewat chat."),
             )
         }
-    } else {
-        let reason = b.reason.as_deref().map(str::trim).filter(|x| !x.is_empty()).ok_or_else(|| AppError::Bad("Alasan penolakan wajib diisi.".into()))?;
-        (
-            "rejected",
-            format!("{} kamu belum disetujui staf. Alasannya: {reason}", r.title),
-            None,
-            json!({ "reject_reason": reason }),
-            format!("{} {first} ditolak", r.title),
-            format!("Alasan sudah dikirim ke {first} lewat chat."),
-        )
+        (true, _) => {
+            let answer = required(&b.answer, "Tulis jawaban untuk mahasiswa dulu.")?;
+            let unit = d["unit"].as_str().unwrap_or("Unit terkait");
+            (
+                "done",
+                format!("{unit} menjawab tiket {}:\n\n{answer}", r.id),
+                None,
+                json!({ "answer": answer, "approved_by": staf, "approved_at": at }),
+                "replyTicket",
+                format!("Tiket {first} dijawab"),
+                format!("Jawaban sudah dikirim ke {first} lewat chat."),
+            )
+        }
     };
 
     let msg = insert_message(&s.db, &r.student_id, "agent", Some(&text), None, card.as_ref()).await?;
@@ -277,8 +376,12 @@ pub async fn decide(State(s): State<AppState>, me: CurrentUser, Path(id): Path<S
     patch["decided_at"] = json!(now());
     merge_data(&s.db, &r.id, patch).await?;
     sqlx::query("UPDATE requests SET status = ?2, updated_at = unixepoch() WHERE id = ?1").bind(&r.id).bind(status).execute(&s.db).await?;
-    let (tool, result) = if b.approve { ("approveRequest", format!("Disetujui {staf}")) } else { ("rejectRequest", format!("Ditolak {staf}")) };
-    audit_staf(&s.db, &r, tool, &result).await?;
+    let verb = match tool {
+        "rejectRequest" => "Ditolak",
+        "replyTicket" => "Dijawab",
+        _ => "Disetujui",
+    };
+    audit_staf(&s.db, &r, tool, &format!("{verb} {staf}")).await?;
     Ok(Json(json!({ "title": title, "sub": sub })))
 }
 
@@ -289,16 +392,19 @@ pub async fn undo(State(s): State<AppState>, me: CurrentUser, Path(id): Path<Str
     let r = load(&s.db, &id).await?;
     let d = r.data();
     let fresh = d["decided_at"].as_i64().is_some_and(|t| now() - t <= 120);
-    if !matches!(r.status.as_str(), "approved" | "rejected") || !fresh {
+    if !matches!(r.status.as_str(), "approved" | "rejected" | "done") || !fresh || d["cancelled"] == true {
         return Err(AppError::Bad("Keputusan ini sudah tidak bisa dibatalkan.".into()));
     }
     if let Some(mid) = d["decision_msg"].as_i64() {
         sqlx::query("DELETE FROM chat_messages WHERE id = ?1").bind(mid).execute(&s.db).await?;
     }
+    if r.kind(&d) == "booking" {
+        sqlx::query("UPDATE bookings SET status = 'held' WHERE request_id = ?1").bind(&r.id).execute(&s.db).await?;
+    }
     let back = if r.worker == "helpdesk" { "submitted" } else { "pending_approval" };
     sqlx::query(
         "UPDATE requests SET status = ?2, updated_at = unixepoch(), \
-         data = json_remove(data, '$.letter_no', '$.approved_by', '$.approved_at', '$.reject_reason', '$.decision_msg', '$.decided_at') WHERE id = ?1",
+         data = json_remove(data, '$.letter_no', '$.approved_by', '$.approved_at', '$.reject_reason', '$.answer', '$.decision_msg', '$.decided_at') WHERE id = ?1",
     )
     .bind(&r.id)
     .bind(back)
@@ -308,3 +414,59 @@ pub async fn undo(State(s): State<AppState>, me: CurrentUser, Path(id): Path<Str
     Ok(Json(json!({ "ok": true })))
 }
 
+/* ---------- metrik dampak ---------- */
+
+/// Perkiraan menit kerja manual staf per jenis pekerjaan yang diambil alih agent.
+/// Asumsi awal, kalibrasi dengan data waktu layanan kampus sebenarnya.
+const MANUAL_MINUTES: [(&str, i64); 6] = [
+    ("submitForApproval", 12), // cek profil, cek syarat, ketik draft surat / cek jadwal ruang
+    ("answerWithCitation", 5), // jawab pertanyaan aturan akademik
+    ("reportDamage", 5),       // catat laporan, cari teknisi, gabung laporan dobel
+    ("createTicket", 3),       // triase pertanyaan ke unit yang tepat
+    ("checkRoomAvailability", 4),
+    ("checkLetterRequirements", 3),
+];
+
+/// Metrik hari ini dari audit log: berapa yang selesai tanpa staf dan berapa waktu staf yang dihemat.
+#[utoipa::path(get, path = "/api/staff/metrics", responses((status = 200)))]
+pub async fn metrics(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Value>, AppError> {
+    me.require(Role::Staf)?;
+    let t0 = today_start();
+    let count = |sql: &'static str| {
+        let db = s.db.clone();
+        async move { sqlx::query_scalar::<_, i64>(sql).bind(t0).fetch_one(&db).await }
+    };
+
+    let surat = count("SELECT COUNT(*) FROM requests WHERE created_at >= ?1 AND worker = 'surat'").await?;
+    let tiket = count("SELECT COUNT(*) FROM requests WHERE created_at >= ?1 AND worker = 'helpdesk'").await?;
+    let laporan = count("SELECT COUNT(*) FROM requests WHERE created_at >= ?1 AND worker = 'fasilitas' AND json_extract(data, '$.report_id') IS NOT NULL").await?;
+    let booking = count("SELECT COUNT(*) FROM requests WHERE created_at >= ?1 AND worker = 'fasilitas' AND json_extract(data, '$.report_id') IS NULL").await?;
+    let jawaban = count("SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND tool = 'answerWithCitation'").await?;
+    let ditahan = count("SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND tool = 'checkLetterRequirements' AND result LIKE 'Belum terpenuhi%'").await?;
+    let ke_staf = count("SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND tool IN ('submitForApproval', 'createTicket')").await?;
+    let avg: Option<f64> = sqlx::query_scalar(
+        "SELECT AVG(a.at - r.created_at) FROM audit_log a JOIN requests r ON r.id = a.request_id WHERE a.at >= ?1 AND a.tool = 'submitForApproval'",
+    )
+    .bind(t0)
+    .fetch_one(&s.db)
+    .await?;
+
+    let mut saved = 0;
+    for (tool, minutes) in MANUAL_MINUTES {
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND tool = ?2").bind(t0).bind(tool).fetch_one(&s.db).await?;
+        saved += n * minutes;
+    }
+
+    // Selesai otomatis: dijawab dengan sumber, laporan langsung ke teknisi, atau ditahan dengan alasan jelas.
+    let auto = jawaban + laporan + ditahan;
+    let handled = auto + ke_staf;
+    Ok(Json(json!({
+        "total": surat + tiket + laporan + booking + jawaban,
+        "by": { "surat": surat, "tiket": tiket, "booking": booking, "laporan": laporan, "jawaban": jawaban },
+        "avg_minutes": avg.map(|s| ((s / 60.0).round() as i64).max(1)),
+        "auto": auto,
+        "handled": handled,
+        "auto_pct": if handled > 0 { auto * 100 / handled } else { 0 },
+        "saved_minutes": saved,
+    })))
+}

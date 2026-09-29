@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { ArrowDownWideNarrow, Bot, Check, CircleAlert, ExternalLink, Inbox, Maximize2, MousePointerClick, Pencil, X } from "lucide-react"
+import { ArrowDownWideNarrow, Bot, Check, CircleAlert, ExternalLink, Inbox, Maximize2, MousePointerClick, Pencil, Reply, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -40,7 +40,19 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number][0]
 
-const EDIT_LABEL: Record<Worker, string> = { surat: "Edit draft", helpdesk: "Balas", fasilitas: "Ubah jadwal" }
+const EDIT_LABEL: Record<Worker, string> = { surat: "Edit draft", helpdesk: "", fasilitas: "Ubah jadwal" }
+
+type Metrics = {
+  total: number
+  by: { surat: number; tiket: number; booking: number; laporan: number; jawaban: number }
+  avg_minutes: number | null
+  auto: number
+  handled: number
+  auto_pct: number
+  saved_minutes: number
+}
+
+const hours = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1).replace(".", ",")} jam` : `${m} mnt`)
 
 // Catatan: editor draft belum ada, fokus MVP ada di approve/reject
 const notInDemo = () => toast("Belum tersedia di versi ini", { description: "Edit draft menyusul setelah MVP." })
@@ -74,7 +86,8 @@ function Toast({ ok, title, sub, onUndo }: { ok: boolean; title: string; sub: st
   )
 }
 
-function Detail({ item, busy, onApprove, onReject }: { item: QueueItem; busy: boolean; onApprove: () => void; onReject: () => void }) {
+function Detail({ item, busy, onApprove, onReject, onReply }: { item: QueueItem; busy: boolean; onApprove: () => void; onReject: () => void; onReply: () => void }) {
+  const ticket = item.worker === "helpdesk"
   const last = item.timeline.length - 1
   return (
     <>
@@ -91,17 +104,19 @@ function Detail({ item, busy, onApprove, onReject }: { item: QueueItem; busy: bo
           </span>
         </div>
         <div className="flex flex-none gap-2">
-          <Button variant="outline" className="px-3.5" onClick={notInDemo}>
-            <Pencil />
-            {EDIT_LABEL[item.worker]}
-          </Button>
+          {!ticket && (
+            <Button variant="outline" className="px-3.5" onClick={notInDemo}>
+              <Pencil />
+              {EDIT_LABEL[item.worker]}
+            </Button>
+          )}
           <Button variant="destructive-outline" className="px-3.5 active:scale-[0.98]" onClick={onReject} disabled={busy}>
             <X />
             Reject
           </Button>
-          <Button className="px-[18px] active:scale-[0.98]" onClick={onApprove} disabled={busy}>
-            <Check />
-            {item.worker === "helpdesk" ? "Teruskan" : "Approve"}
+          <Button className="px-[18px] active:scale-[0.98]" onClick={ticket ? onReply : onApprove} disabled={busy}>
+            {ticket ? <Reply /> : <Check />}
+            {ticket ? "Balas" : "Approve"}
           </Button>
         </div>
       </div>
@@ -208,7 +223,7 @@ function Detail({ item, busy, onApprove, onReject }: { item: QueueItem; busy: bo
               </div>
               <div className="flex flex-col gap-[3px]">
                 <span className="text-[13px] font-semibold text-violet">Menunggu keputusan staf</span>
-                <span className="text-xs text-muted-foreground">Approve, reject, atau edit draft</span>
+                <span className="text-xs text-muted-foreground">{ticket ? "Balas atau tolak tiket" : "Approve, reject, atau edit draft"}</span>
               </div>
             </li>
           </ol>
@@ -239,15 +254,17 @@ export function StaffConsole() {
   const [loadError, setLoadError] = useState("")
   const [tab, setTab] = useState<Tab>("semua")
   const [selected, setSelected] = useState<string | null>(null)
-  const [rejectOpen, setRejectOpen] = useState(false)
+  const [dialog, setDialog] = useState<"reject" | "reply" | null>(null)
   const [reason, setReason] = useState("")
+  const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(
     () =>
-      api<QueueItem[]>("/staff/queue").then(
-        (xs) => {
+      Promise.all([api<QueueItem[]>("/staff/queue"), api<Metrics>("/staff/metrics")]).then(
+        ([xs, m]) => {
           setItems(xs)
+          setMetrics(m)
           setLoadError("")
         },
         (e: Error) => setLoadError(e.message),
@@ -270,17 +287,23 @@ export function StaffConsole() {
   const counts = { semua: live.length, surat: 0, tiket: 0, booking: 0 }
   live.forEach((q) => counts[q.tab]++)
 
-  async function decide(approve: boolean) {
+  async function decide(approve: boolean, text = "") {
     if (!cur) return
     setBusy(true)
     try {
       const id = cur.id
       const next = visible.find((q) => q.id !== id)?.id ?? null
-      const res = await post<{ title: string; sub: string }>(`/staff/requests/${id}/decide`, { approve, reason: approve ? undefined : reason.trim() })
-      setRejectOpen(false)
+      const reply = approve && cur.worker === "helpdesk"
+      const res = await post<{ title: string; sub: string }>(`/staff/requests/${id}/decide`, {
+        approve,
+        reason: approve ? undefined : text.trim(),
+        answer: reply ? text.trim() : undefined,
+      })
+      setDialog(null)
       setReason("")
       setSelected(next)
       setItems((xs) => xs?.filter((x) => x.id !== id) ?? xs)
+      load()
       toast.custom(
         (t) => (
           <Toast
@@ -319,11 +342,24 @@ export function StaffConsole() {
     <div className="flex min-h-[100dvh] min-w-[1280px] flex-col">
       <TopBar section="Staff Console" themeToggle />
 
-      <div className="grid flex-none grid-cols-4 gap-3 px-6 pt-5">
-        {/* Catatan: tiga metrik pertama masih angka desain, dihitung dari audit log di hari 4 */}
-        <Metric label="Permintaan hari ini" value="38" note="Surat 17 · Tiket 12 · Booking 9" />
-        <Metric label="Rata-rata waktu proses" value={<>6<span className="ml-[3px] font-sans text-[15px] font-semibold text-muted-foreground">mnt</span></>} note="masuk sampai siap diputuskan" />
-        <Metric label="Selesai otomatis" value="68%" note="26 dari 38 tanpa staf" noteClass="font-semibold text-ok" />
+      <div className="grid flex-none grid-cols-5 gap-3 px-6 pt-5">
+        <Metric
+          label="Permintaan hari ini"
+          value={metrics?.total ?? "–"}
+          note={metrics ? `Surat ${metrics.by.surat} · Tanya ${metrics.by.jawaban + metrics.by.tiket} · Ruang ${metrics.by.booking} · Lapor ${metrics.by.laporan}` : ""}
+        />
+        <Metric
+          label="Rata-rata waktu proses"
+          value={metrics?.avg_minutes != null ? <>{metrics.avg_minutes}<span className="ml-[3px] font-sans text-[15px] font-semibold text-muted-foreground">mnt</span></> : "–"}
+          note="masuk sampai siap diputuskan"
+        />
+        <Metric
+          label="Selesai otomatis"
+          value={metrics ? `${metrics.auto_pct}%` : "–"}
+          note={metrics ? `${metrics.auto} dari ${metrics.handled} tanpa staf` : ""}
+          noteClass="font-semibold text-ok"
+        />
+        <Metric label="Waktu staf dihemat" value={metrics ? hours(metrics.saved_minutes) : "–"} note="estimasi dari audit log" valueClass="text-primary" />
         <Metric
           label="Menunggu persetujuan"
           value={items ? live.length : "–"}
@@ -414,7 +450,7 @@ export function StaffConsole() {
 
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
           {cur ? (
-            <Detail key={cur.id} item={cur} busy={busy} onApprove={() => decide(true)} onReject={() => setRejectOpen(true)} />
+            <Detail key={cur.id} item={cur} busy={busy} onApprove={() => decide(true)} onReject={() => setDialog("reject")} onReply={() => setDialog("reply")} />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-10 text-center text-muted-foreground">
               <span className="grid size-12 place-items-center rounded-lg bg-muted">
@@ -428,26 +464,28 @@ export function StaffConsole() {
       </div>
 
       <Dialog
-        open={rejectOpen && !!cur}
+        open={!!dialog && !!cur}
         onOpenChange={(o) => {
-          setRejectOpen(o)
-          if (!o) setReason("")
+          if (!o) {
+            setDialog(null)
+            setReason("")
+          }
         }}
       >
         <DialogContent showCloseButton={false} className="w-[500px] max-w-[calc(100%-2rem)] gap-0 overflow-hidden rounded-[16px] border-0 p-0 shadow-e2 sm:max-w-[500px]">
           <div className="flex flex-col gap-1.5 px-6 pt-[22px]">
             <div className="flex items-start justify-between gap-4">
-              <DialogTitle className="text-lg font-bold">Tolak {cur?.type}?</DialogTitle>
-              <button type="button" aria-label="Tutup" onClick={() => setRejectOpen(false)} className="-mr-2 -mt-1.5 grid size-8 cursor-pointer place-items-center rounded-[8px] hover:bg-muted">
+              <DialogTitle className="text-lg font-bold">{dialog === "reply" ? `Balas tiket ${cur?.id}` : `Tolak ${cur?.type}?`}</DialogTitle>
+              <button type="button" aria-label="Tutup" onClick={() => setDialog(null)} className="-mr-2 -mt-1.5 grid size-8 cursor-pointer place-items-center rounded-[8px] hover:bg-muted">
                 <X className="size-4 text-muted-foreground" />
               </button>
             </div>
             <DialogDescription className="text-sm leading-5 text-muted-foreground">
-              Alasan dikirim ke {first} lewat chat, bersama langkah berikutnya.
+              {dialog === "reply" ? `Jawaban dikirim ke ${first} lewat chat. Pertanyaan: ${cur?.summary}` : `Alasan dikirim ke ${first} lewat chat, bersama langkah berikutnya.`}
             </DialogDescription>
           </div>
           <div className="flex flex-col gap-3 px-6 py-[18px]">
-            <div className="flex flex-wrap gap-1.5">
+            <div className={cn("flex flex-wrap gap-1.5", dialog === "reply" && "hidden")}>
               {chips.map((c) => (
                 <button key={c.label} type="button" onClick={() => setReason(c.text)} className="inline-flex h-[30px] cursor-pointer items-center rounded-full border border-input px-3 text-[13px] font-medium hover:bg-muted">
                   {c.label}
@@ -456,19 +494,32 @@ export function StaffConsole() {
             </div>
             <label className="flex flex-col gap-1.5">
               <span className="text-[13px] font-semibold">
-                Alasan penolakan <span className="text-destructive">*</span>
+                {dialog === "reply" ? "Jawaban" : "Alasan penolakan"} <span className="text-destructive">*</span>
               </span>
-              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Tulis alasan dan apa yang perlu dilakukan mahasiswa" />
-              <span className="text-xs text-muted-foreground">Wajib diisi. Minimal sebut alasan dan langkah berikutnya.</span>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={dialog === "reply" ? "Tulis jawaban yang jelas, sebut sumber atau langkahnya" : "Tulis alasan dan apa yang perlu dilakukan mahasiswa"}
+              />
+              <span className="text-xs text-muted-foreground">
+                {dialog === "reply" ? "Wajib diisi. Mahasiswa menerima jawaban ini apa adanya." : "Wajib diisi. Minimal sebut alasan dan langkah berikutnya."}
+              </span>
             </label>
           </div>
           <div className="flex justify-end gap-2 border-t bg-background px-6 py-3.5">
-            <Button variant="ghost" className="px-3.5" onClick={() => setRejectOpen(false)}>
+            <Button variant="ghost" className="px-3.5" onClick={() => setDialog(null)}>
               Batal
             </Button>
-            <Button variant="destructive" disabled={!reason.trim() || busy} onClick={() => decide(false)}>
-              Tolak permintaan
-            </Button>
+            {dialog === "reply" ? (
+              <Button disabled={!reason.trim() || busy} onClick={() => decide(true, reason)}>
+                <Reply />
+                Kirim jawaban
+              </Button>
+            ) : (
+              <Button variant="destructive" disabled={!reason.trim() || busy} onClick={() => decide(false, reason)}>
+                Tolak permintaan
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

@@ -189,7 +189,7 @@ impl Cx<'_> {
         Ok(id)
     }
 
-    async fn set_card_state(&self, id: i64, state: &str) -> anyhow::Result<()> {
+    pub async fn set_card_state(&self, id: i64, state: &str) -> anyhow::Result<()> {
         sqlx::query("UPDATE chat_messages SET card = json_set(card, '$.state', ?1) WHERE id = ?2 AND student_id = ?3 AND card IS NOT NULL")
             .bind(state).bind(id).bind(&self.me.id)
             .execute(&self.s.db)
@@ -199,8 +199,13 @@ impl Cx<'_> {
     }
 
     pub async fn audit(&self, tool: &str, result: &str) -> anyhow::Result<()> {
-        sqlx::query("INSERT INTO audit_log (student_id, request_id, actor, tool, result) VALUES (?1, ?2, 'agent', ?3, ?4)")
-            .bind(&self.me.id).bind(&self.th.request_id).bind(tool).bind(result)
+        let req = self.th.request_id.clone();
+        self.audit_as("agent", req.as_deref(), tool, result).await
+    }
+
+    pub async fn audit_as(&self, actor: &str, request_id: Option<&str>, tool: &str, result: &str) -> anyhow::Result<()> {
+        sqlx::query("INSERT INTO audit_log (student_id, request_id, actor, tool, result) VALUES (?1, ?2, ?3, ?4, ?5)")
+            .bind(&self.me.id).bind(request_id).bind(actor).bind(tool).bind(result)
             .execute(&self.s.db)
             .await?;
         Ok(())
@@ -230,6 +235,16 @@ pub async fn run(s: &AppState, me: &User, input: Input, tx: &Sender<Ev>) -> anyh
                 cx.th.transcript.push(llm::tool_result(&p.call_id, &json!({ "status": "dilewati", "catatan": "mahasiswa menulis pesan baru tanpa mengisi card" })));
             }
             cx.th.transcript.push(llm::user(&t));
+        }
+        // Aksi deterministik dari card: tidak perlu LLM.
+        Input::Action { message_id, action, payload } if action == "cancel_booking" || action == "photo" => {
+            if action == "photo" {
+                crate::fasilitas::add_photo(&mut cx, &payload).await?;
+            } else {
+                crate::fasilitas::cancel_booking(&mut cx, message_id, &payload).await?;
+            }
+            cx.th.save(&s.db, &me.id).await?;
+            return Ok(());
         }
         Input::Action { message_id, action, .. } if action == "ticket" => {
             cx.set_card_state(message_id, "submitted").await?;

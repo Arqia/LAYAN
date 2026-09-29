@@ -41,6 +41,15 @@ impl Llm {
             return Ok(mock::next(transcript));
         };
         match Self::call(url, key, model, client, transcript).await {
+            // LLM kadang diam di tengah alur. Kalau aturan mock tahu langkah berikutnya, pakai itu.
+            Ok(m) if m["tool_calls"].as_array().is_none_or(|c| c.is_empty()) && m["content"].as_str().is_none_or(|t| t.trim().is_empty()) => {
+                let fallback = mock::next(transcript);
+                if fallback["tool_calls"].is_array() {
+                    eprintln!("LLM diam di tengah alur, langkah ini dilanjutkan mock");
+                    return Ok(fallback);
+                }
+                Ok(m)
+            }
             Ok(m) => Ok(m),
             Err(e) => {
                 eprintln!("LLM gagal, langkah ini pakai mock: {e:#}");
@@ -50,7 +59,7 @@ impl Llm {
     }
 
     async fn call(url: &str, key: &str, model: &str, client: &reqwest::Client, transcript: &[Value]) -> anyhow::Result<Value> {
-        let mut messages = vec![json!({ "role": "system", "content": tools::SYSTEM_PROMPT })];
+        let mut messages = vec![json!({ "role": "system", "content": tools::system_prompt() })];
         messages.extend_from_slice(transcript);
         let body = json!({
             "model": model,

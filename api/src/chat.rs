@@ -69,8 +69,8 @@ pub async fn action(
 fn stream(s: AppState, me: User, input: Input) -> impl IntoResponse {
     let (tx, rx) = tokio::sync::mpsc::channel::<Ev>(32);
     tokio::spawn(async move {
-        // Catatan: satu lock global, cukup untuk skala demo. Ganti ke lock per mahasiswa kalau ramai.
-        let _guard = s.agent_lock.lock().await;
+        let lock = s.agent_locks.lock().expect("agent_locks").entry(me.id.clone()).or_default().clone();
+        let _guard = lock.lock().await;
         if let Err(e) = agent::run(&s, &me, input, &tx).await {
             let message = match e.downcast_ref::<Nope>() {
                 Some(n) => n.0.clone(),
@@ -117,12 +117,12 @@ pub async fn upload(State(s): State<AppState>, me: CurrentUser, mut mp: Multipar
     Ok(Json(json!({ "id": id, "name": name, "size": bytes.len() })))
 }
 
-/// Unduh lampiran. Hanya pemilik dan staf.
+/// Unduh lampiran. Hanya pemilik, staf, dan teknisi (foto kerusakan).
 pub async fn download(State(s): State<AppState>, me: CurrentUser, Path(id): Path<String>) -> Result<Response, AppError> {
     let row: Option<(String, String, String, String)> =
         sqlx::query_as("SELECT owner_id, name, mime, path FROM attachments WHERE id = ?1").bind(&id).fetch_optional(&s.db).await?;
     let (owner, name, mime, path) = row.ok_or(AppError::NotFound)?;
-    if owner != me.user.id && me.user.role != Role::Staf {
+    if owner != me.user.id && me.user.role == Role::Mahasiswa {
         return Err(AppError::Forbidden);
     }
     let bytes = tokio::fs::read(&path).await.map_err(|_| AppError::NotFound)?;

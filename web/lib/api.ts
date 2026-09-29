@@ -13,7 +13,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const post = <T>(path: string, data?: unknown) =>
   api<T>(path, { method: "POST", body: data === undefined ? undefined : JSON.stringify(data) })
 
-export type Card = { kind: string; state: "active" | "submitted" | "skipped"; data: Record<string, unknown> }
+export type Card = { kind: string; state: "active" | "submitted" | "skipped" | "cancelled"; data: Record<string, unknown> }
 
 export type ChatMessage = {
   id: number

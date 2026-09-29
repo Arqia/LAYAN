@@ -4,13 +4,13 @@ import { useState, type ReactNode } from "react"
 import Link from "next/link"
 import type { LucideIcon } from "lucide-react"
 import {
-  CalendarClock, Camera, Check, CircleAlert, CircleCheck, Download, ExternalLink, Eye,
+  CalendarClock, CircleEllipsis, Projector, SprayCan, Wifi, Zap, Camera, Check, CircleAlert, CircleCheck, Download, ExternalLink, Eye,
   FileCheck2, History, Hourglass, Phone, Quote, Snowflake, Ticket, Upload, Wrench, X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import type { Check as CheckT, Worker } from "@/lib/data"
+import type { Check as CheckT, Urgency, Worker } from "@/lib/data"
 import { FileTypeTile, StatusBadge, UrgencyBadge, WorkerTile, formatSize } from "./primitives"
 
 /* ---------- dasar ---------- */
@@ -382,13 +382,20 @@ export const ROOMS: Room[] = [
   { code: "F2.3", time: "13.00–15.00", cap: "40 orang", fac: "Proyektor, AC" },
   { code: "G2.4", time: "15.00–17.00", shifted: true, cap: "25 orang · ruang rapat", fac: "TV, AC. Jam digeser 2 jam" },
 ]
+export type RoomsData = { date_label: string; options: Room[] }
 
-export function RoomsCard({ onPick }: { onPick?: (r: Room) => void }) {
-  const [sel, setSel] = useState(ROOMS[0].code)
+export function RoomsCard({
+  data = { date_label: "Jumat, 2 Okt", options: ROOMS },
+  onPick,
+}: {
+  data?: RoomsData
+  onPick?: (r: Room) => void
+}) {
+  const [sel, setSel] = useState(data.options[0]?.code)
   return (
-    <CardShell worker="fasilitas" title="Pilih ruangan" right={<span className="text-xs text-muted-foreground">Jumat, 2 Okt</span>}>
+    <CardShell worker="fasilitas" title="Pilih ruangan" right={<span className="text-xs text-muted-foreground">{data.date_label}</span>}>
       <div role="radiogroup" aria-label="Pilihan ruangan" className="flex flex-col gap-2 p-2.5">
-        {ROOMS.map((r) => {
+        {data.options.map((r) => {
           const on = r.code === sel
           return (
             <button
@@ -402,12 +409,7 @@ export function RoomsCard({ onPick }: { onPick?: (r: Room) => void }) {
                 on ? "border-2 border-primary bg-accent p-[11px]" : "border bg-card hover:bg-background",
               )}
             >
-              <span
-                className={cn(
-                  "mt-px grid size-5 flex-none place-items-center rounded-full",
-                  on ? "border-2 border-primary" : "border-[1.5px] border-dash",
-                )}
-              >
+              <span className={cn("mt-px grid size-5 flex-none place-items-center rounded-full", on ? "border-2 border-primary" : "border-[1.5px] border-dash")}>
                 {on && <span className="size-2.5 rounded-full bg-primary" />}
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -415,14 +417,16 @@ export function RoomsCard({ onPick }: { onPick?: (r: Room) => void }) {
                   <span className="font-mono text-[15px] font-semibold">{r.code}</span>
                   <span className={cn("text-[13px] font-semibold", r.shifted && "text-warn")}>{r.time}</span>
                 </span>
-                <span className="text-xs leading-[17px] text-muted-foreground">{r.cap} · {r.fac}</span>
+                <span className="text-xs leading-[17px] text-muted-foreground">
+                  {r.cap} · {r.fac}
+                </span>
               </span>
             </button>
           )
         })}
       </div>
       <div className="px-3.5 pb-3.5 pt-1">
-        <Button size="card" className="w-full" onClick={() => onPick?.(ROOMS.find((r) => r.code === sel)!)}>
+        <Button size="card" className="w-full active:scale-[0.98]" onClick={() => onPick?.(data.options.find((r) => r.code === sel)!)}>
           Pilih {sel}
         </Button>
       </div>
@@ -432,25 +436,30 @@ export function RoomsCard({ onPick }: { onPick?: (r: Room) => void }) {
 
 /* ---------- 8 · Booking ditahan ---------- */
 
-export function BookingHeldCard({ room = ROOMS[0], onCancel }: { room?: Room; onCancel?: () => void }) {
+export type Held = { request_id: string; code: string; time: string; dn: string; dd: string; mm: string; purpose: string; people: number; until: string }
+const SAMPLE_HELD: Held = { request_id: "", code: "G1.2", time: "13.00–15.00", dn: "JUM", dd: "2", mm: "Okt", purpose: "Rapat himpunan", people: 20, until: "Rabu 09.20" }
+
+export function BookingHeldCard({ data = SAMPLE_HELD, onCancel }: { data?: Held; onCancel?: () => void }) {
   return (
     <CardShell worker="fasilitas" icon={CalendarClock} title="Booking ditahan">
       <div className="flex items-center gap-3.5 p-3.5">
         <div className="w-16 flex-none overflow-hidden rounded-md border text-center">
-          <div className="py-[3px] text-[11px] font-bold tracking-[.04em] text-white" style={{ background: "#B4541A" }}>JUM</div>
-          <div className="pt-1 text-2xl font-bold leading-7">2</div>
-          <div className="pb-[5px] text-[11px] text-muted-foreground">Okt</div>
+          <div className="py-[3px] text-[11px] font-bold tracking-[.04em] text-white" style={{ background: "#B4541A" }}>{data.dn}</div>
+          <div className="pt-1 text-2xl font-bold leading-7">{data.dd}</div>
+          <div className="pb-[5px] text-[11px] text-muted-foreground">{data.mm}</div>
         </div>
         <div className="flex flex-1 flex-col gap-[3px]">
-          <span className="font-mono text-lg font-semibold">{room.code}</span>
-          <span className="text-sm font-medium">{room.time}</span>
-          <span className="text-xs text-muted-foreground">Rapat himpunan · 20 orang</span>
+          <span className="font-mono text-lg font-semibold">{data.code}</span>
+          <span className="text-sm font-medium">{data.time}</span>
+          <span className="text-xs text-muted-foreground">
+            {data.purpose} · {data.people} orang
+          </span>
         </div>
       </div>
       <div className="mx-3.5 mb-3.5 flex items-start gap-2.5 rounded-md bg-violet-bg px-3 py-2.5 text-[13px] leading-[18px] text-hold">
         <Hourglass className="mt-px size-4 flex-none" />
         <span>
-          <b className="font-bold">Ditahan 24 jam, menunggu konfirmasi.</b> Lepas otomatis Rabu 09.20 kalau belum dikonfirmasi.
+          <b className="font-bold">Ditahan 24 jam, menunggu konfirmasi.</b> Lepas otomatis {data.until} kalau belum dikonfirmasi.
         </span>
       </div>
       <div className="flex justify-end border-t px-3.5 py-3">
@@ -464,43 +473,81 @@ export function BookingHeldCard({ room = ROOMS[0], onCancel }: { room?: Room; on
 
 /* ---------- 9 · Laporan kerusakan ---------- */
 
-export function ReportCard() {
+const CAT_ICON: Record<string, LucideIcon> = {
+  Listrik: Zap, AC: Snowflake, Proyektor: Projector, Jaringan: Wifi, Kebersihan: SprayCan, Lainnya: CircleEllipsis,
+}
+
+export type ReportData = {
+  report_id: string; room: string; category: string; urgency: Urgency; tech: string; initials: string; reporters: number; merged: boolean
+}
+const SAMPLE_REPORT: ReportData = { report_id: "LK-0587", room: "F2.3", category: "AC", urgency: "Sedang", tech: "Pak Joko", initials: "PJ", reporters: 3, merged: true }
+
+/** `onPhoto` mengembalikan pesan error kalau gagal. */
+export function ReportCard({ data = SAMPLE_REPORT, onPhoto }: { data?: ReportData; onPhoto?: (f: File) => Promise<string | void> }) {
   const [photos, setPhotos] = useState(0)
+  const [error, setError] = useState("")
+  const [busy, setBusy] = useState(false)
+  const Icon = CAT_ICON[data.category] ?? CircleEllipsis
+  const inputId = `ly-photo-${data.report_id}`
   return (
-    <CardShell worker="fasilitas" icon={Wrench} title="Laporan kerusakan" right={<span className="font-mono text-xs text-muted-foreground">LK-0587</span>}>
+    <CardShell worker="fasilitas" icon={Wrench} title="Laporan kerusakan" right={<span className="font-mono text-xs text-muted-foreground">{data.report_id}</span>}>
       <KeyValue
         className="gap-y-2 p-3.5"
         rows={[
-          ["Ruang", <span key="r" className="font-mono font-semibold">F2.3</span>],
-          ["Kategori", <span key="k" className="flex items-center gap-1.5"><Snowflake className="size-3.5" />AC</span>],
-          ["Urgensi", <UrgencyBadge key="u" urgency="Sedang" large />],
+          ["Ruang", <span key="r" className="font-mono font-semibold">{data.room}</span>],
+          ["Kategori", <span key="k" className="flex items-center gap-1.5"><Icon className="size-3.5" />{data.category}</span>],
+          ["Urgensi", <UrgencyBadge key="u" urgency={data.urgency} large />],
           [
             "Teknisi",
             <span key="t" className="flex items-center gap-2">
-              <span className="grid size-[22px] place-items-center rounded-full border bg-muted text-[10px] font-bold">PJ</span>
-              Pak Joko
+              <span className="grid size-[22px] place-items-center rounded-full border bg-muted text-[10px] font-bold">{data.initials}</span>
+              {data.tech}
             </span>,
           ],
         ]}
       />
-      <div className="mx-3.5 mb-3.5 flex items-center gap-2.5 rounded-md bg-muted px-3 py-2.5 text-[13px] leading-[18px]">
-        <span className="flex flex-none">
-          {["#FBEBDF", "#E2F2EE", "#16181A"].map((c, i) => (
-            <span key={c} className={cn("size-[22px] rounded-full border-2 border-muted", i && "-ml-2")} style={{ background: c }} />
-          ))}
-        </span>
-        <span>
-          <b className="font-bold">3 orang melaporkan hal yang sama.</b> Laporanmu aku gabungkan.
-        </span>
-      </div>
+      {data.reporters > 1 && (
+        <div className="mx-3.5 mb-3.5 flex items-center gap-2.5 rounded-md bg-muted px-3 py-2.5 text-[13px] leading-[18px]">
+          <span className="flex flex-none">
+            {["#FBEBDF", "#E2F2EE", "#16181A"].slice(0, Math.min(3, data.reporters)).map((c, i) => (
+              <span key={c} className={cn("size-[22px] rounded-full border-2 border-muted", i && "-ml-2")} style={{ background: c }} />
+            ))}
+          </span>
+          <span>
+            <b className="font-bold">{data.reporters} orang melaporkan hal yang sama.</b> {data.merged ? "Laporanmu aku gabungkan." : "Laporan sudah digabung."}
+          </span>
+        </div>
+      )}
       <div className="px-3.5 pb-3.5">
-        <input id="ly-photo" type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => e.target.files?.length && setPhotos((n) => n + 1)} />
-        <Button variant="outline" size="card" className="w-full" asChild>
-          <label htmlFor="ly-photo">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/jpeg,image/png"
+          capture="environment"
+          className="sr-only"
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ""
+            if (!f || !onPhoto) return
+            setBusy(true)
+            const err = await onPhoto(f)
+            setBusy(false)
+            setError(err ?? "")
+            if (!err) setPhotos((n) => n + 1)
+          }}
+        />
+        <Button variant="outline" size="card" className="w-full" asChild disabled={busy}>
+          <label htmlFor={inputId}>
             <Camera />
-            {photos ? `${photos} foto ditambahkan` : "Tambah foto"}
+            {busy ? "Mengupload…" : photos ? `${photos} foto ditambahkan` : "Tambah foto"}
           </label>
         </Button>
+        {error && (
+          <span className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+            <CircleAlert className="size-3.5" />
+            {error}
+          </span>
+        )}
       </div>
     </CardShell>
   )

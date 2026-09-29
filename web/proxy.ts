@@ -40,5 +40,6 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|design-system).*)"],
+  // aset publik & PWA tidak perlu login
+  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|sw.js|pwa-icon|icon|apple-icon|offline).*)"],
 }

@@ -9,10 +9,12 @@ import { api } from "@/lib/api"
 import { STATUS_LABEL, type Status, type Worker } from "@/lib/data"
 import { StatusBadge, WorkerTile } from "./primitives"
 
-type Item = { id: string; worker: Worker; title: string; status: Status; time: string; meta: string; active: boolean }
+type Kind = "surat" | "tiket" | "booking" | "laporan"
+type Item = { id: string; worker: Worker; kind: Kind; title: string; status: Status; time: string; meta: string; active: boolean }
 type Detail = {
   id: string
   worker: Worker
+  kind: Kind
   title: string
   status: Status
   fields: [string, string][]
@@ -153,10 +155,24 @@ const STEPS: { status: Status; note: string }[] = [
   { status: "approved", note: "Nomor surat terbit" },
   { status: "done", note: "PDF siap diunduh" },
 ]
-const TICKET_STEPS: { status: Status; note: string }[] = [
-  { status: "submitted", note: "Diteruskan ke unit terkait" },
-  { status: "approved", note: "Ditindaklanjuti unit" },
-]
+type Step = { status: Status; note: string; label?: string }
+const KIND_STEPS: Record<Exclude<Kind, "surat">, Step[]> = {
+  tiket: [
+    { status: "submitted", note: "Diteruskan ke unit terkait" },
+    { status: "done", label: "Dijawab", note: "Jawaban dikirim lewat chat" },
+  ],
+  booking: [
+    { status: "submitted", note: "Lewat chat LAYAN" },
+    { status: "needs_info", label: "Pilih ruang", note: "Agent cek bentrok dan kapasitas" },
+    { status: "pending_approval", note: "Ruang ditahan 24 jam, menunggu staf" },
+    { status: "approved", label: "Terkonfirmasi", note: "Ruang siap dipakai" },
+  ],
+  laporan: [
+    { status: "submitted", label: "Diteruskan ke teknisi", note: "Laporan dobel digabung otomatis" },
+    { status: "processing", label: "Dikerjakan", note: "Teknisi sedang menangani" },
+    { status: "done", note: "Kamu dikabari lewat chat" },
+  ],
+}
 
 export function HistoryDetail({ id }: { id: string }) {
   const { data: d, error } = useApi<Detail>(`/requests/${encodeURIComponent(id)}`)
@@ -167,9 +183,10 @@ export function HistoryDetail({ id }: { id: string }) {
       </Frame>
     )
 
-  const steps = d.worker === "helpdesk" ? TICKET_STEPS : STEPS
+  const steps: Step[] = d.kind === "surat" ? STEPS : KIND_STEPS[d.kind]
   const rejected = d.status === "rejected"
-  const cur = rejected ? steps.findIndex((s) => s.status === "approved") : steps.findIndex((s) => s.status === d.status)
+  // ditolak: tandai di langkah keputusan (langkah terakhir sebelum selesai)
+  const cur = rejected ? Math.max(0, steps.findIndex((s) => ["approved", "done"].includes(s.status))) : steps.findIndex((s) => s.status === d.status)
   const hasLetter = !!d.letter
 
   return (
@@ -242,7 +259,7 @@ export function HistoryDetail({ id }: { id: string }) {
                   </div>
                   <div className="flex flex-col gap-0.5 pb-4">
                     <span className={cn("text-sm font-semibold", state === "current" && (isReject ? "text-destructive" : "text-violet"), state === "todo" && "text-subtle-foreground")}>
-                      {isReject ? STATUS_LABEL.rejected : STATUS_LABEL[s.status]}
+                      {isReject ? STATUS_LABEL.rejected : (s.label ?? STATUS_LABEL[s.status])}
                     </span>
                     <span className="text-[13px] leading-[18px] text-muted-foreground">{isReject ? d.reject_reason : s.note}</span>
                   </div>

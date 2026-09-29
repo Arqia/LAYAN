@@ -1,7 +1,9 @@
 mod agent;
 mod auth;
+mod board;
 mod chat;
 mod error;
+mod fasilitas;
 mod llm;
 mod mock;
 mod requests;
@@ -23,21 +25,23 @@ pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub cookie_secure: bool,
     pub llm: Arc<llm::Llm>,
-    pub agent_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Satu agent berjalan per mahasiswa; mahasiswa lain tidak ikut mengantre.
+    pub agent_locks: Arc<std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     pub upload_dir: String,
 }
 
 #[derive(OpenApi)]
 #[openapi(
-    info(title = "LAYAN API", version = "0.2.0"),
+    info(title = "LAYAN API", version = "0.3.0"),
     paths(
         health, auth::login, auth::logout, auth::me,
         chat::list, chat::send, chat::action, chat::upload,
-        requests::mine, requests::detail, requests::queue, requests::decide, requests::undo,
+        requests::mine, requests::detail, requests::queue, requests::decide, requests::undo, requests::metrics,
+        board::list, board::set_status,
     ),
     components(schemas(
         auth::Role, auth::User, auth::LoginReq, auth::LoginRes,
-        agent::ChatMessage, chat::SendReq, chat::ActionReq, requests::DecideReq,
+        agent::ChatMessage, chat::SendReq, chat::ActionReq, requests::DecideReq, board::StatusReq,
     ))
 )]
 struct ApiDoc;
@@ -74,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
         db,
         cookie_secure: env_or("COOKIE_SECURE", "0") == "1",
         llm: Arc::new(llm),
-        agent_lock: Arc::default(),
+        agent_locks: Arc::default(),
         upload_dir: env_or("UPLOAD_DIR", "uploads"),
     };
 
@@ -93,6 +97,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/staff/queue", get(requests::queue))
         .route("/api/staff/requests/{id}/decide", post(requests::decide))
         .route("/api/staff/requests/{id}/undo", post(requests::undo))
+        .route("/api/staff/metrics", get(requests::metrics))
+        .route("/api/reports", get(board::list))
+        .route("/api/reports/{id}/status", post(board::set_status))
         .with_state(state);
 
     let addr = env_or("BIND", "127.0.0.1:8080");

@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import Link from "next/link"
-import { ArrowUp, ChevronRight, CircleAlert, CircleCheck, History, Paperclip, RefreshCw, ShieldCheck, WifiOff } from "lucide-react"
+import { ArrowUp, CalendarClock, ChevronRight, CircleAlert, CircleCheck, History, Paperclip, RefreshCw, ShieldCheck, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Check, Worker } from "@/lib/data"
 import { api, stream, type AgentEvent, type ChatMessage } from "@/lib/api"
 import {
-  AnswerCard, ChecksCard, CollapsedCard, DraftCard, FormCard, LetterDoneCard, TicketCard, UPLOAD_INPUT_ID, UploadCard,
-  type Answer, type LetterDone, type Ticket,
+  AnswerCard, BookingHeldCard, ChecksCard, CollapsedCard, DraftCard, FormCard, LetterDoneCard, ReportCard, RoomsCard, TicketCard,
+  UPLOAD_INPUT_ID, UploadCard, type Answer, type Held, type LetterDone, type ReportData, type RoomsData, type Ticket,
 } from "./action-cards"
 import { AccountPill } from "./app-bar"
 import { AgentAvatar, FileTypeTile, Mark, TypingDots, WorkerTile, formatSize } from "./primitives"
@@ -265,6 +265,17 @@ export function Chat() {
     }
   }
 
+  async function photo(messageId: number, reportId: string, file: File): Promise<string | void> {
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const att = await api<{ id: string }>("/attachments", { method: "POST", body: fd })
+      await act(messageId, "photo", { report_id: reportId, attachment_id: att.id })
+    } catch (e) {
+      return e instanceof TypeError ? "Koneksi terputus. Coba lagi." : (e as Error).message
+    }
+  }
+
   function renderCard(m: ChatMessage) {
     const c = m.card!
     const d = c.data
@@ -287,6 +298,14 @@ export function Chat() {
         return <TicketCard data={d as Ticket} />
       case "done":
         return <LetterDoneCard data={d as LetterDone} />
+      case "rooms":
+        if (c.state !== "active") return <CollapsedCard worker="fasilitas" title="Pilihan ruang" note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
+        return <RoomsCard data={d as RoomsData} onPick={(r) => act(m.id, "pick", { code: r.code })} />
+      case "held":
+        if (c.state === "cancelled") return <CollapsedCard worker="fasilitas" icon={CalendarClock} title={`Booking ${d.code}`} note="Dibatalkan" tone="muted" />
+        return <BookingHeldCard data={d as Held} onCancel={() => act(m.id, "cancel_booking", { request_id: d.request_id })} />
+      case "report":
+        return <ReportCard data={d as ReportData} onPhoto={(f) => photo(m.id, d.report_id as string, f)} />
       default:
         return null
     }

@@ -5,9 +5,15 @@ use anyhow::bail;
 use serde_json::{json, Value};
 
 use crate::agent::{Cx, Nope, Pending};
+use crate::fasilitas;
 use crate::util::tanggal;
 
-pub const SYSTEM_PROMPT: &str = "\
+/// Prompt sistem, memuat tanggal hari ini supaya "Jumat" bisa diubah jadi tanggal.
+pub fn system_prompt() -> String {
+    format!("{SYSTEM_PROMPT}\n\nHari ini {} WIB.", crate::util::today_long())
+}
+
+const SYSTEM_PROMPT: &str = "\
 Kamu LAYAN, digital campus worker yang mengurus layanan kampus untuk mahasiswa sampai selesai.
 
 Aturan:
@@ -22,7 +28,11 @@ Aturan:
   benar-benar menjawab, dan kutip bagiannya. Jika tidak ada jawaban pasti, createTicket ke unit yang tepat.
 - Jika mahasiswa menekan \"Masih bingung? Buat tiket\", panggil createTicket dengan pertanyaan terakhirnya.
 - Kamu tidak bisa menyetujui permintaan. Keputusan akhir selalu di staf.
-- Booking ruang dan laporan kerusakan belum tersedia di versi ini. Bilang dengan jujur.
+- Booking ruang: findRooms dengan tanggal (YYYY-MM-DD), jam (HH:MM), jumlah orang, keperluan, dan ruang pilihan jika disebut
+  (\"ruang rapat\" berarti G2.4). Kalau info kurang, tanya dulu dalam satu kalimat. Setelah mahasiswa memilih, holdRoom.
+- Laporan kerusakan: reportDamage dengan kode ruang (mis. F2.3), judul singkat, kategori, dan urgensi
+  (Tinggi kalau berbahaya atau mengganggu kuliah hari ini, Sedang kalau mengganggu, Rendah kalau kosmetik).
+  Laporan dobel otomatis digabung oleh tool.
 - Setelah tool selesai, jangan mengulang isi card. Balas kosong atau satu kalimat singkat.";
 
 fn def(name: &str, desc: &str, props: Value, required: &[&str]) -> Value {
@@ -94,6 +104,38 @@ pub fn definitions() -> Value {
             }),
             &["category", "unit", "question"],
         ),
+        def(
+            "findRooms",
+            "Cari ruang kosong untuk booking dan tampilkan maksimal 3 pilihan. Menunggu mahasiswa memilih.",
+            json!({
+                "date": text("Tanggal YYYY-MM-DD"),
+                "start": text("Jam mulai HH:MM"),
+                "end": text("Jam selesai HH:MM"),
+                "people": { "type": "integer", "description": "Jumlah orang" },
+                "purpose": text("Keperluan, mis. 'Rapat himpunan'"),
+                "preferred_room": text("Kode ruang yang diminta jika ada, mis. G2.4"),
+                "message": text("Kalimat pengantar di atas pilihan ruang"),
+            }),
+            &["date", "start", "end", "people", "purpose"],
+        ),
+        def(
+            "holdRoom",
+            "Tahan ruang yang dipilih mahasiswa selama 24 jam dan kirim ke staf untuk konfirmasi.",
+            json!({ "summary": text("Ringkasan 1-2 kalimat untuk staf"), "message": text("Kalimat untuk mahasiswa") }),
+            &[],
+        ),
+        def(
+            "reportDamage",
+            "Catat laporan kerusakan fasilitas dan teruskan ke teknisi. Laporan dobel digabung otomatis.",
+            json!({
+                "room": text("Kode ruang, mis. F2.3"),
+                "title": text("Judul singkat kerusakan, mis. 'AC mati, ruangan panas'"),
+                "category": { "type": "string", "enum": fasilitas::CATEGORIES },
+                "urgency": { "type": "string", "enum": ["Rendah", "Sedang", "Tinggi"] },
+                "message": text("Kalimat untuk mahasiswa"),
+            }),
+            &["room", "title", "category", "urgency"],
+        ),
     ])
 }
 
@@ -111,6 +153,9 @@ pub fn status_for(tool: &str) -> (&'static str, Option<usize>) {
         "searchKnowledgeBase" => ("Mencari di Pedoman Akademik", None),
         "answerWithCitation" => ("Menyusun jawaban", None),
         "createTicket" => ("Membuat tiket", None),
+        "findRooms" => ("Mengecek jadwal ruangan", None),
+        "holdRoom" => ("Menahan ruang", None),
+        "reportDamage" => ("Mencatat laporan kerusakan", None),
         _ => ("Mengerjakan", None),
     }
 }
@@ -121,15 +166,15 @@ pub enum Outcome {
     Pause(i64),
 }
 
-fn arg<'a>(args: &'a Value, key: &str) -> &'a str {
+pub(crate) fn arg<'a>(args: &'a Value, key: &str) -> &'a str {
     args[key].as_str().map(str::trim).unwrap_or("")
 }
 
-fn or<'a>(s: &'a str, default: &'a str) -> &'a str {
+pub(crate) fn or<'a>(s: &'a str, default: &'a str) -> &'a str {
     if s.is_empty() { default } else { s }
 }
 
-fn card(kind: &str, data: Value) -> Value {
+pub(crate) fn card(kind: &str, data: Value) -> Value {
     json!({ "kind": kind, "state": "active", "data": data })
 }
 
@@ -148,7 +193,7 @@ pub fn courses(d: &Value) -> Vec<String> {
 
 /* ---------- akses tabel requests ---------- */
 
-async fn create_request(cx: &mut Cx<'_>, prefix: &str, worker: &str, title: &str, status: &str, data: Value) -> anyhow::Result<String> {
+pub(crate) async fn create_request(cx: &mut Cx<'_>, prefix: &str, worker: &str, title: &str, status: &str, data: Value) -> anyhow::Result<String> {
     let db = &cx.s.db;
     let (year, n): (String, i64) = sqlx::query_as(
         "SELECT strftime('%Y', 'now', '+7 hours'), (SELECT COUNT(*) FROM requests WHERE id LIKE ?1)",
@@ -348,6 +393,10 @@ pub async fn exec(cx: &mut Cx<'_>, name: &str, args: &Value) -> anyhow::Result<O
             Ok(Outcome::Done(json!({ "tiket": id })))
         }
 
+        "findRooms" => fasilitas::find_rooms(cx, args).await,
+        "holdRoom" => fasilitas::hold_room(cx, args).await,
+        "reportDamage" => fasilitas::report_damage(cx, args).await,
+
         _ => bail!("Tool tidak dikenal: {name}"),
     }
 }
@@ -366,7 +415,7 @@ pub async fn resume(cx: &mut Cx<'_>, p: &Pending, action: &str, payload: &Value)
             merge_data(&db, &req, json!({ "activity": activity, "courses": list })).await?;
             cx.say_user(Some(&format!("{activity}, {}", join_id(&list))), None).await?;
             let dates = get_data(&db, &req).await?["dates"].clone();
-            Ok(json!({ "activity": activity, "courses": list, "dates": dates }))
+            Ok(json!({ "activity": activity, "courses": list, "dates": dates, "langkah_berikutnya": "Minta bukti kegiatan dengan requestAttachment." }))
         }
         ("requestAttachment", "upload") => {
             let att = arg(payload, "attachment_id");
@@ -381,8 +430,9 @@ pub async fn resume(cx: &mut Cx<'_>, p: &Pending, action: &str, payload: &Value)
             };
             cx.say_user(None, Some(json!({ "name": name, "size": size }))).await?;
             cx.audit("requestAttachment", &format!("Lampiran diterima ({name})")).await?;
-            Ok(json!({ "file": name, "ukuran_kb": size / 1024 }))
+            Ok(json!({ "file": name, "ukuran_kb": size / 1024, "langkah_berikutnya": "Lanjutkan checkLetterRequirements." }))
         }
+        ("findRooms", "pick") => fasilitas::pick(cx, payload).await,
         _ => Err(Nope("Aksi ini tidak cocok dengan card yang aktif.".into()).into()),
     }
 }

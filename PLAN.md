@@ -65,13 +65,16 @@ Catatan Windows: laptop ini tidak punya MSVC Build Tools, jadi `api/` memakai
 - [x] Hari 1: git init, Next.js pindah ke `web/`, API Rust (skema, seed, login cookie + Bearer, OpenAPI), halaman login, proxy per peran
 - [x] Hari 2: agent loop (tool calling format OpenAI) + provider mock, worker Surat end-to-end, SSE status ke chat, upload lampiran
 - [x] Hari 3: Staff Console ke API (approve/reject/batalkan, audit log), surat HTML siap cetak/PDF, worker Helpdesk (FTS5 + tiket), Gemini `gemini-flash-lite-latest` dengan fallback ke mock saat error/timeout 20 detik
-- [ ] Hari 4
+- [x] Hari 4: worker Fasilitas (cari ruang + alternatif jam, tahan 24 jam, konfirmasi staf, laporan kerusakan digabung otomatis), Board Teknisi ke API (pelapor dikabari saat selesai), balasan tiket oleh staf, metrik dampak dari audit log, lock agent per mahasiswa, PWA installable (manifest, ikon, service worker offline)
+- [ ] Deploy ke home server (dimajukan supaya app Android bisa diuji di HP asli)
+- [ ] Hari 5-6: app Android
+- [ ] Hari 7: data demo, skrip demo, cek akhir
 
 Catatan hari 3:
 - PDF memakai halaman `/surat/[id]` + dialog cetak browser, bukan Typst (tanpa dependency, hasil sama).
 - Model Flash non-lite sering "high demand" di free tier (5–40 detik); lite stabil sekitar 2 detik per langkah.
 - Isi knowledge base di `api/migrations/0002_agent.sql` adalah contoh, bukan pedoman resmi.
-- Tiga metrik pertama Staff Console masih angka desain, dihitung dari audit log di hari 4.
+- Metrik Staff Console dihitung dari audit log sejak hari 4. Menit kerja manual per jenis tugas adalah asumsi (MANUAL_MINUTES di api/src/requests.rs), silakan dikalibrasi.
 
 ## Di luar MVP
 
