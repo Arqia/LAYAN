@@ -21,10 +21,13 @@ berapa permintaan selesai tanpa staf dan perkiraan waktu staf yang dihemat.
 
 ```
 api/       Rust (Axum + SQLx + SQLite): auth, data, agent loop + tools, SSE
-web/       Next.js PWA: loket mahasiswa, Staff Console, Board Teknisi
-android/   Kotlin + Jetpack Compose: app mahasiswa
+web/       Next.js: landing page (/), PWA (/app mahasiswa, /staf Staff Console, /teknisi Board)
+android/   Kotlin + Jetpack Compose: App Android (mahasiswa saja)
+docs/      Kontrak API (docs/API.md)
 deploy/    systemd unit + skrip deploy ke home server (Cloudflare Tunnel)
 ```
+
+PWA dan App Android adalah dua produk terpisah yang berbagi API yang sama. Pembagian kerja: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Agent memakai LLM format chat completions (Gemini, DeepSeek, dll). Tanpa API key, agent
 tiruan berbasis aturan mengambil alih, dan juga jadi cadangan kalau LLM error atau diam.

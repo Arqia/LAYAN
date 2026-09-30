@@ -83,7 +83,7 @@ export function HistoryList() {
   ] as const
 
   return (
-    <Frame title="Riwayat permintaan" back="/">
+    <Frame title="Riwayat permintaan" back="/app">
       <div className="flex gap-2 px-4 pb-3 pt-1">
         {chips.map((c) => (
           <button
@@ -113,7 +113,7 @@ export function HistoryList() {
             Minta surat atau tanya aturan akademik lewat chat. Semuanya tercatat di sini.
           </span>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/">Buka chat</Link>
+            <Link href="/app">Buka chat</Link>
           </Button>
         </div>
       )}
@@ -125,7 +125,7 @@ export function HistoryList() {
               <span className="px-1 pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">{g.label}</span>
               <div className="overflow-hidden rounded-lg border bg-card">
                 {g.items.map((it, i) => (
-                  <Link key={it.id} href={`/riwayat/${it.id}`} className={cn("flex items-start gap-3 p-3.5 hover:bg-background", i > 0 && "border-t")}>
+                  <Link key={it.id} href={`/app/riwayat/${it.id}`} className={cn("flex items-start gap-3 p-3.5 hover:bg-background", i > 0 && "border-t")}>
                     <WorkerTile worker={it.worker} size={36} />
                     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                       <div className="flex items-baseline justify-between gap-2">
@@ -178,7 +178,7 @@ export function HistoryDetail({ id }: { id: string }) {
   const { data: d, error } = useApi<Detail>(`/requests/${encodeURIComponent(id)}`)
   if (error || !d)
     return (
-      <Frame title="Detail permintaan" back="/riwayat">
+      <Frame title="Detail permintaan" back="/app/riwayat">
         {error ? <ErrorLine message={error} /> : <ListSkeleton />}
       </Frame>
     )
@@ -192,7 +192,7 @@ export function HistoryDetail({ id }: { id: string }) {
   return (
     <Frame
       title="Detail permintaan"
-      back="/riwayat"
+      back="/app/riwayat"
       footer={
         <div className="grid flex-none grid-cols-2 gap-2 border-t px-4 py-3">
           <Button variant="outline" size="lg" disabled={!hasLetter} asChild={hasLetter}>
@@ -209,7 +209,7 @@ export function HistoryDetail({ id }: { id: string }) {
             )}
           </Button>
           <Button variant="outline" size="lg" asChild>
-            <Link href="/">
+            <Link href="/app">
               <MessageCircle />
               Buka chat
             </Link>

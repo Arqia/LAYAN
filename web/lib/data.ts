@@ -24,7 +24,7 @@ export type Urgency = "Rendah" | "Sedang" | "Tinggi"
 export type Role = "mahasiswa" | "staf" | "teknisi"
 
 /** Halaman awal tiap peran setelah login. */
-export const HOME: Record<Role, string> = { mahasiswa: "/", staf: "/staf", teknisi: "/teknisi" }
+export const HOME: Record<Role, string> = { mahasiswa: "/app", staf: "/staf", teknisi: "/teknisi" }
 
 /** User yang login, bentuknya sama dengan `User` di api/src/auth.rs. */
 export type Me = {

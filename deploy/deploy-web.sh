@@ -5,7 +5,7 @@ set -euo pipefail
 HOST=${HOST:-home-server-cf}
 cd "$(dirname "$0")/../web"
 rm -rf .next/standalone
-API_URL=http://127.0.0.1:8170 npm run build
+NEXT_PUBLIC_BUILD_ID=$(git rev-parse --short HEAD) API_URL=http://127.0.0.1:8170 npm run build
 cp -r public .next/standalone/
 cp -r .next/static .next/standalone/.next/
 tar -czf /tmp/layan-web.tgz -C .next/standalone .

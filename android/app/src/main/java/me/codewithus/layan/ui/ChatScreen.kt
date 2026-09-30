@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.codewithus.layan.BuildConfig
 import me.codewithus.layan.data.AgentEvent
 import me.codewithus.layan.data.Api
 import me.codewithus.layan.data.ApiException
@@ -189,7 +190,7 @@ private val SHORTCUTS = listOf(
 )
 
 @Composable
-fun ChatScreen(api: Api, me: Me, onHistory: () -> Unit, onLetter: (String) -> Unit, onLogout: () -> Unit) {
+fun ChatScreen(api: Api, me: Me, onHistory: () -> Unit, onLetter: (String) -> Unit, onLogout: () -> Unit, onCheckUpdate: () -> Unit) {
     val vm: ChatVM = viewModel { ChatVM(api) }
     val ctx = LocalContext.current
     val online = rememberOnline()
@@ -239,7 +240,7 @@ fun ChatScreen(api: Api, me: Me, onHistory: () -> Unit, onLetter: (String) -> Un
         Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Mark()
             Text("LAYAN", style = t(17, 800), modifier = Modifier.weight(1f))
-            AccountPill(me, onLogout)
+            AccountPill(me, onLogout, onCheckUpdate)
             IconButton(onHistory, Modifier.size(44.dp)) { Icon(Lucide.History, "Riwayat permintaan", Modifier.size(21.dp)) }
         }
         if (!empty) Box(Modifier.fillMaxWidth().height(1.dp).background(C.border))
@@ -308,7 +309,7 @@ fun ChatScreen(api: Api, me: Me, onHistory: () -> Unit, onLetter: (String) -> Un
 }
 
 @Composable
-private fun AccountPill(me: Me, onLogout: () -> Unit) {
+private fun AccountPill(me: Me, onLogout: () -> Unit, onCheckUpdate: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
@@ -323,6 +324,7 @@ private fun AccountPill(me: Me, onLogout: () -> Unit) {
                 Text(me.name, style = t(13, 600))
                 Text(me.nim ?: me.email, style = t(12, color = C.mutedFg))
             }
+            DropdownMenuItem(text = { Text("Cek pembaruan (v${BuildConfig.VERSION_NAME})", style = t(14)) }, leadingIcon = { Icon(Lucide.RefreshCw, null, Modifier.size(16.dp)) }, onClick = { open = false; onCheckUpdate() })
             DropdownMenuItem(text = { Text("Keluar", style = t(14)) }, leadingIcon = { Icon(Lucide.LogOut, null, Modifier.size(16.dp)) }, onClick = { open = false; onLogout() })
         }
     }

@@ -25,6 +25,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import java.io.File
+import java.security.DigestOutputStream
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /* ---------- model, sama bentuknya dengan respons API Rust ---------- */
@@ -69,6 +72,10 @@ data class Detail(
     val reject_reason: String? = null,
     val student: Student,
 )
+
+/** Isi `latest.json` di server, lihat deploy/release-android.sh. */
+@Serializable
+data class AppRelease(val versionCode: Int, val versionName: String, val notes: String = "", val sha256: String, val minVersionCode: Int = 0, val url: String)
 
 @Serializable
 private data class Attachment(val id: String, val name: String, val size: Long)
@@ -165,6 +172,33 @@ class Api(private val session: Session) {
     suspend fun requests(): List<HistoryItem> = call(request("/requests").build()) { json.decodeFromString(it) }
 
     suspend fun detail(id: String): Detail = call(request("/requests/$id").build()) { json.decodeFromString(it) }
+
+    /** Rilis App Android terbaru, null kalau server belum punya rilis. Melempar exception kalau offline. */
+    suspend fun latestRelease(): AppRelease? = withContext(Dispatchers.IO) {
+        client.newCall(request("/app/latest").build()).execute().use { res ->
+            when {
+                res.code == 404 -> null
+                res.isSuccessful -> json.decodeFromString<AppRelease>(res.body.string())
+                else -> throw ApiException("Server sedang bermasalah (${res.code}). Coba lagi.")
+            }
+        }
+    }
+
+    /** Unduh APK rilis ke [dest], tolak kalau sha256-nya tidak cocok. */
+    suspend fun downloadApk(release: AppRelease, dest: File) = withContext(Dispatchers.IO) {
+        val url = if (release.url.startsWith("http")) release.url else webBase + release.url
+        val md = MessageDigest.getInstance("SHA-256")
+        client.newCall(Request.Builder().url(url).build()).execute().use { res ->
+            if (!res.isSuccessful) throw ApiException("Gagal mengunduh pembaruan (${res.code}). Coba lagi.")
+            dest.parentFile?.mkdirs()
+            DigestOutputStream(dest.outputStream(), md).use { res.body.byteStream().copyTo(it) }
+        }
+        val hex = md.digest().joinToString("") { "%02x".format(it) }
+        if (!hex.equals(release.sha256, ignoreCase = true)) {
+            dest.delete()
+            throw ApiException("File pembaruan rusak. Coba lagi.")
+        }
+    }
 
     /** POST lalu baca Server-Sent Events baris demi baris. */
     private fun stream(path: String, body: JsonObject): Flow<AgentEvent> = flow {

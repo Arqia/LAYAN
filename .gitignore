@@ -1,1 +1,3 @@
 # aturan per proyek ada di web/.gitignore dan api/.gitignore
+# dokumen hackathon dari panitia, bukan bagian repo
+PENS Hackathon*.pdf

@@ -1,4 +1,5 @@
 mod agent;
+mod app_update;
 mod auth;
 mod board;
 mod chat;
@@ -28,6 +29,7 @@ pub struct AppState {
     /// Satu agent berjalan per mahasiswa; mahasiswa lain tidak ikut mengantre.
     pub agent_locks: Arc<std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     pub upload_dir: String,
+    pub app_dir: String,
 }
 
 #[derive(OpenApi)]
@@ -38,6 +40,7 @@ pub struct AppState {
         chat::list, chat::send, chat::action, chat::upload,
         requests::mine, requests::detail, requests::queue, requests::decide, requests::undo, requests::metrics,
         board::list, board::set_status,
+        app_update::latest, app_update::apk,
     ),
     components(schemas(
         auth::Role, auth::User, auth::LoginReq, auth::LoginRes,
@@ -80,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
         llm: Arc::new(llm),
         agent_locks: Arc::default(),
         upload_dir: env_or("UPLOAD_DIR", "uploads"),
+        app_dir: env_or("APP_DIR", "releases"),
     };
 
     let app = Router::new()
@@ -100,6 +104,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/staff/metrics", get(requests::metrics))
         .route("/api/reports", get(board::list))
         .route("/api/reports/{id}/status", post(board::set_status))
+        .route("/api/app/latest", get(app_update::latest))
+        .route("/api/app/layan.apk", get(app_update::apk))
         .with_state(state);
 
     let addr = env_or("BIND", "127.0.0.1:8080");

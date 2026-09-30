@@ -1,8 +1,14 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
+
+// Keystore rilis bersama (tidak di-commit). Tanpa file ini, build release memakai kunci debug dan tidak bisa meng-update APK rilis.
+val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }
+    ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
 
 android {
     namespace = "me.codewithus.layan"
@@ -12,16 +18,25 @@ android {
         applicationId = "me.codewithus.layan"
         minSdk = 26
         targetSdk = 36
+        // naikkan tiap rilis (deploy/release-android.sh membaca dua baris ini)
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "API_BASE", "\"${providers.gradleProperty("layan.apiBase").get()}\"")
     }
 
+    signingConfigs {
+        if (keystoreProps != null) create("release") {
+            storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Catatan: APK demo ditandatangani kunci debug. Buat keystore sendiri sebelum rilis ke Play Store.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (keystoreProps != null) "release" else "debug")
         }
     }
     buildFeatures {

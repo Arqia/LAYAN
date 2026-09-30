@@ -68,13 +68,46 @@ Catatan Windows: laptop ini tidak punya MSVC Build Tools, jadi `api/` memakai
 - [x] Hari 4: worker Fasilitas (cari ruang + alternatif jam, tahan 24 jam, konfirmasi staf, laporan kerusakan digabung otomatis), Board Teknisi ke API (pelapor dikabari saat selesai), balasan tiket oleh staf, metrik dampak dari audit log, lock agent per mahasiswa, PWA installable (manifest, ikon, service worker offline)
 - [x] Deploy: https://layan.codewithus.me (Cloudflare Tunnel, service layan-api :8170 dan layan-web :8171, password demo server berbeda dari repo)
 - [x] Hari 5-6: app Android (Kotlin + Compose): login Bearer, chat dengan 10 action card + SSE, upload dari HP, riwayat + detail, surat + simpan PDF lewat dialog cetak Android
-- [ ] Hari 7: data demo, skrip demo, cek akhir
+- [ ] Hari 7: data demo, skrip demo (DEMO.md sudah ada, belum dilatih penuh di server + HP), cek akhir
 
 Catatan hari 3:
 - PDF memakai halaman `/surat/[id]` + dialog cetak browser, bukan Typst (tanpa dependency, hasil sama).
 - Model Flash non-lite sering "high demand" di free tier (5–40 detik); lite stabil sekitar 2 detik per langkah.
 - Isi knowledge base di `api/migrations/0002_agent.sql` adalah contoh, bukan pedoman resmi.
 - Metrik Staff Console dihitung dari audit log sejak hari 4. Menit kerja manual per jenis tugas adalah asumsi (MANUAL_MINUTES di api/src/requests.rs), silakan dikalibrasi.
+
+## Fase akhir (30 Sep - 6 Okt): update, pemisahan PWA vs Android, landing, tim
+
+Keputusan: landing page di domain yang sama (`/`), PWA mahasiswa pindah ke `/app` (tanpa ubah tunnel Cloudflare).
+Frontend web dipegang 2 orang tim, Arva memegang API + Android. Aturan kerja dan pemilik folder: [CONTRIBUTING.md](CONTRIBUTING.md). Kontrak API: [docs/API.md](docs/API.md).
+
+| | PWA (`web/`) | App Android (`android/`) |
+|---|---|---|
+| Pengguna | mahasiswa, staf, teknisi | mahasiswa saja |
+| Distribusi | URL | APK dari `/api/app/layan.apk` (link di landing) |
+| Update | notifikasi versi lewat `/version` | dialog versi lewat `/api/app/latest` |
+| Pemilik | FE-1 (PWA mahasiswa), FE-2 (landing, Staff Console, Board) | Arva |
+
+Jadwal:
+
+| Tanggal | Arva | Tim FE |
+|---|---|---|
+| 30 Sep | route `/app`, notifikasi update PWA, dokumen kontrak, verifikasi deploy | clone, jalankan dev |
+| 1 Okt | `/api/app/latest` + keystore rilis | mulai tugas masing-masing |
+| 2-3 Okt | update di App Android + skrip rilis, uji di HP | landing + polish PWA |
+| 4 Okt | review/merge PR, tuning agent | PR terakhir |
+| 5 Okt | freeze fitur, deploy, latih DEMO.md penuh | uji HP/desktop |
+| 6 Okt | cadangan + kumpulkan | kumpulkan |
+
+- [x] Route mahasiswa pindah ke `/app`, `/` jadi landing (placeholder, diganti FE-2)
+- [x] Notifikasi versi baru PWA (`/version` + `update-notifier.tsx`, id build dari git sha lewat `deploy/deploy-web.sh`)
+- [x] `CONTRIBUTING.md`, `docs/API.md`
+- [x] `GET /api/app/latest`, `GET /api/app/layan.apk` (api, `APP_DIR`)
+- [x] Update in-app Android (cek saat app dibuka tiap 6 jam + menu "Cek pembaruan", unduh, cek sha256, installer) + `deploy/release-android.sh`
+- [ ] Buat keystore rilis + `android/keystore.properties`, uninstall APK debug di HP demo, terbitkan rilis pertama
+- [ ] Deploy API baru ke server (`bash deploy/deploy-api.sh`, lalu restart layan-api)
+- [ ] Landing page final (FE-2)
+- [ ] Deploy web baru ke server (belum: `bash deploy/deploy-web.sh`, lalu restart layan-web)
 
 ## Di luar MVP
 
@@ -84,4 +117,4 @@ Push notification · sinkronisasi offline · uji DeepSeek · vector search · ed
 
 - [x] API key Gemini dari https://aistudio.google.com/apikey (dibutuhkan hari 3)
 - [x] Rust terpasang di laptop ini (`rustup`), dibutuhkan hari 1
-- [ ] Android Studio + SDK platform terpasang, dibutuhkan hari 5
+- [x] Android Studio + SDK platform terpasang, dibutuhkan hari 5

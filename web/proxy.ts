@@ -6,14 +6,16 @@ import { fetchMe } from "@/lib/session"
 const AREA: [string, Role][] = [
   ["/staf", "staf"],
   ["/teknisi", "teknisi"],
-  ["/riwayat", "mahasiswa"],
+  ["/app", "mahasiswa"],
 ]
 
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl
+  // landing page publik
+  if (pathname === "/") return NextResponse.next()
   const toLogin = () => {
     const url = new URL("/login", req.url)
-    if (pathname !== "/") url.searchParams.set("next", pathname + search)
+    url.searchParams.set("next", pathname + search)
     return NextResponse.redirect(url)
   }
 
@@ -34,12 +36,12 @@ export async function proxy(req: NextRequest) {
     return res
   }
 
-  const need = pathname === "/" ? "mahasiswa" : AREA.find(([p]) => pathname.startsWith(p))?.[1]
+  const need = AREA.find(([p]) => pathname.startsWith(p))?.[1]
   if (need && need !== me.role) return NextResponse.redirect(new URL(HOME[me.role], req.url))
   return NextResponse.next()
 }
 
 export const config = {
   // aset publik & PWA tidak perlu login
-  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|sw.js|pwa-icon|icon|apple-icon|offline).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|version|sw.js|pwa-icon|icon|apple-icon|offline).*)"],
 }

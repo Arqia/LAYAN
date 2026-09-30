@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "LAYAN · Digital Campus Worker",
     short_name: "LAYAN",
     description: "Satu loket chat untuk mengurus layanan kampus sampai selesai.",
-    start_url: "/",
+    start_url: "/app",
     display: "standalone",
     background_color: "#F7F7F5",
     theme_color: "#0A7A66",

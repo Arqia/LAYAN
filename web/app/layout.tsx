@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes"
 import { fetchMe } from "@/lib/session"
 import { StoreProvider } from "@/components/layan/store"
 import { SwRegister } from "@/components/layan/sw-register"
+import { UpdateNotifier } from "@/components/layan/update-notifier"
 import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
 
@@ -34,6 +35,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <StoreProvider me={me}>{children}</StoreProvider>
           <Toaster position="bottom-right" offset={24} />
           <SwRegister />
+          <UpdateNotifier />
         </ThemeProvider>
       </body>
     </html>

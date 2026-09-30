@@ -364,7 +364,7 @@ export function TicketCard({ data = SAMPLE_TICKET }: { data?: Ticket }) {
       </div>
       <div className="px-3.5 pb-3.5">
         <Button variant="outline" size="card" className="w-full" asChild>
-          <Link href="/riwayat">
+          <Link href="/app/riwayat">
             <History />
             Lihat di riwayat
           </Link>

@@ -319,7 +319,7 @@ export function Chat() {
       <MobileHeader
         bordered={!empty || !online}
         right={
-          <Link href="/riwayat" aria-label="Riwayat permintaan" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted">
+          <Link href="/app/riwayat" aria-label="Riwayat permintaan" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted">
             <History className="size-[21px]" />
           </Link>
         }
