@@ -27,7 +27,7 @@ function subscribe(cb: () => void) {
 const useOnline = () => useSyncExternalStore(subscribe, () => navigator.onLine, () => true)
 
 const SHORTCUTS: { worker: Worker; title: string; sub: string; prompt: string }[] = [
-  { worker: "surat", title: "Minta surat", sub: "Aktif kuliah, dispensasi", prompt: "Kak, aku mau minta surat izin lomba tanggal 10–12 Oktober" },
+  { worker: "surat", title: "Minta surat dispensasi", sub: "Izin lomba atau kegiatan", prompt: "Kak, aku mau minta surat izin lomba tanggal 10–12 Oktober" },
   { worker: "helpdesk", title: "Tanya aturan akademik", sub: "SKS, cuti, nilai. Lengkap dengan sumber", prompt: "Batas maksimal SKS kalau IP semester lalu 3,2 berapa?" },
   { worker: "fasilitas", title: "Lapor kerusakan / booking ruangan", sub: "Cek bentrok, langsung ke teknisi", prompt: "Mau booking ruang rapat Jumat 13.00–15.00, 20 orang" },
 ]
@@ -189,14 +189,14 @@ export function MobileHeader({ bordered, right }: { bordered?: boolean; right?: 
 
 /* ---------- loket chat ---------- */
 
-export function Chat() {
+export function Chat({ initialText = "" }: { initialText?: string }) {
   const online = useOnline()
   const [messages, setMessages] = useState<ChatMessage[] | null>(null)
   const [agent, setAgent] = useState<AgentStatus>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [failed, setFailed] = useState<{ file: File; messageId: number } | null>(null)
-  const [text, setText] = useState("")
+  const [text, setText] = useState(initialText)
   const scroller = useRef<HTMLDivElement>(null)
 
   const load = useCallback(
@@ -211,6 +211,11 @@ export function Chat() {
   useEffect(() => {
     load()
   }, [load])
+
+  // ?q= sudah masuk ke kolom chat; buang dari URL supaya refresh tidak mengisi ulang
+  useEffect(() => {
+    if (initialText) window.history.replaceState(null, "", window.location.pathname)
+  }, [initialText])
 
   // Keputusan staf masuk sebagai pesan baru. Cek tiap 5 detik saat tab terlihat dan agent diam.
   useEffect(() => {

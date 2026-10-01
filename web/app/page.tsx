@@ -1,14 +1,11 @@
-import Link from "next/link"
+import type { Metadata } from "next"
+import { Landing } from "@/components/layan/landing"
 
-// Placeholder landing page. Diganti tim frontend (lihat PLAN.md, job desk FE-2).
-export default function Landing() {
-  return (
-    <main className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center gap-6 px-5 py-10">
-      <h1 className="text-[30px] font-bold leading-9 tracking-[-0.02em]">LAYAN</h1>
-      <p className="text-muted-foreground">Satu loket chat untuk mengurus layanan kampus sampai selesai.</p>
-      <Link href="/login" className="font-semibold text-primary">
-        Masuk
-      </Link>
-    </main>
-  )
+export const metadata: Metadata = {
+  title: "LAYAN | Asisten layanan kampus",
+  description: "Ajukan surat dispensasi, tanya aturan akademik, booking ruang, dan lapor kerusakan lewat satu chat.",
+}
+
+export default function Page() {
+  return <Landing />
 }
