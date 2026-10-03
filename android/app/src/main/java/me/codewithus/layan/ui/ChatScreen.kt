@@ -184,7 +184,7 @@ private fun rememberOnline(): Boolean {
 private data class Shortcut(val worker: String, val title: String, val sub: String, val prompt: String)
 
 private val SHORTCUTS = listOf(
-    Shortcut("surat", "Minta surat", "Aktif kuliah, dispensasi", "Kak, aku mau minta surat izin lomba tanggal 10–12 Oktober"),
+    Shortcut("surat", "Minta surat", "Aktif kuliah, dispensasi, magang, beasiswa", "Aku butuh surat keterangan aktif kuliah untuk daftar beasiswa"),
     Shortcut("helpdesk", "Tanya aturan akademik", "SKS, cuti, nilai. Lengkap dengan sumber", "Batas maksimal SKS kalau IP semester lalu 3,2 berapa?"),
     Shortcut("fasilitas", "Lapor kerusakan / booking ruangan", "Cek bentrok, langsung ke teknisi", "Mau booking ruang rapat Jumat 13.00–15.00, 20 orang"),
 )
@@ -436,10 +436,10 @@ private fun Message(m: ChatMessage, vm: ChatVM, onPick: (Long, Boolean) -> Unit,
         val note = if (skipped) "Dilewati" else "Terkirim"
         val tone = if (skipped) "muted" else "ok"
         when (c.kind) {
-            "form" -> if (active) FormCard(vm.busy) { a, co -> vm.act(m.id, "submit", buildJsonObject { put("activity", a); put("courses", co) }) }
-            else CollapsedCard("surat", "Data kegiatan", note, tone)
-            "upload" -> if (active) UploadCard(vm.picked[m.id], vm.cardError[m.id], vm.busy, onPick = { onPick(m.id, false) }, onUpload = { vm.upload(m.id) })
-            else CollapsedCard("surat", "Bukti kegiatan", note, tone)
+            "form" -> if (active) FormCard(d, vm.busy) { values -> vm.act(m.id, "submit", buildJsonObject { values.forEach { (k, v) -> put(k, v) } }) }
+            else CollapsedCard("surat", "Data surat", note, tone)
+            "upload" -> if (active) UploadCard(d.s("title").ifBlank { "Bukti kegiatan" }, vm.picked[m.id], vm.cardError[m.id], vm.busy, onPick = { onPick(m.id, false) }, onUpload = { vm.upload(m.id) })
+            else CollapsedCard("surat", d.s("title").ifBlank { "Bukti kegiatan" }, note, tone)
             "checks" -> ChecksCard(d)
             "draft" -> DraftCard(d, onLetter)
             "answer" -> AnswerCard(d, ticketed = !active, busy = vm.busy) { vm.act(m.id, "ticket") }

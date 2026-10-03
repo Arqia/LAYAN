@@ -89,16 +89,25 @@ function KeyValue({ rows, className }: { rows: [string, ReactNode][]; className?
 
 /* ---------- 1 · Form data kurang ---------- */
 
-export function FormCard({ onSubmit }: { onSubmit?: (v: { activity: string; courses: string }) => void }) {
-  const [activity, setActivity] = useState("")
-  const [courses, setCourses] = useState("")
-  const valid = activity.trim() && courses.trim()
+/** Field form surat dari server (`LETTERS` di api/src/tools.rs). */
+export type FormField = { key: string; label: string; placeholder?: string; helper?: string }
+
+// card form dari sebelum field dikirim server (data kosong) selalu dispensasi
+const LEGACY_FIELDS: FormField[] = [
+  { key: "activity", label: "Nama kegiatan", placeholder: "Gemastik 2026" },
+  { key: "courses", label: "Mata kuliah yang terlewat", placeholder: "Struktur Data, Sistem Digital", helper: "Pisahkan dengan koma. Dosen pengampu aku isi otomatis." },
+]
+
+export function FormCard({ fields, onSubmit }: { fields?: FormField[]; onSubmit?: (v: Record<string, string>) => void }) {
+  const list = fields?.length ? fields : LEGACY_FIELDS
+  const [values, setValues] = useState<Record<string, string>>({})
+  const valid = list.every((f) => values[f.key]?.trim())
   return (
-    <CardShell worker="surat" title="Lengkapi data kegiatan" right={<span className="text-xs font-semibold text-muted-foreground">2 field</span>}>
+    <CardShell worker="surat" title="Lengkapi data surat" right={<span className="text-xs font-semibold text-muted-foreground">{list.length} field</span>}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          if (valid) onSubmit?.({ activity: activity.trim(), courses: courses.trim() })
+          if (valid) onSubmit?.(Object.fromEntries(list.map((f) => [f.key, values[f.key].trim()])))
         }}
       >
         <div className="flex flex-col gap-3.5 p-3.5">
@@ -106,14 +115,16 @@ export function FormCard({ onSubmit }: { onSubmit?: (v: { activity: string; cour
             <CircleCheck className="size-3.5 flex-none text-ok" />
             Nama, NIM, prodi sudah terisi dari profil
           </div>
-          <Field label="Nama kegiatan" placeholder="Contoh: Gemastik 2026" value={activity} onChange={(e) => setActivity(e.target.value)} />
-          <Field
-            label="Mata kuliah yang terlewat"
-            placeholder="Contoh: Struktur Data, Sistem Digital"
-            helper="Pisahkan dengan koma. Dosen pengampu aku isi otomatis."
-            value={courses}
-            onChange={(e) => setCourses(e.target.value)}
-          />
+          {list.map((f) => (
+            <Field
+              key={f.key}
+              label={f.label}
+              placeholder={f.placeholder ? `Contoh: ${f.placeholder}` : undefined}
+              helper={f.helper || undefined}
+              value={values[f.key] ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+            />
+          ))}
         </div>
         <div className="px-3.5 pb-3.5">
           <Button type="submit" size="card" className="w-full" disabled={!valid}>Kirim</Button>
@@ -130,7 +141,7 @@ const MAX = 5 * 1024 * 1024
 export const UPLOAD_INPUT_ID = "ly-upload"
 
 /** `onUpload` mengembalikan pesan error kalau gagal. */
-export function UploadCard({ onUpload }: { onUpload?: (f: File) => Promise<string | void> }) {
+export function UploadCard({ title = "Bukti kegiatan", onUpload }: { title?: string; onUpload?: (f: File) => Promise<string | void> }) {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -146,7 +157,7 @@ export function UploadCard({ onUpload }: { onUpload?: (f: File) => Promise<strin
   return (
     <CardShell
       worker="surat"
-      title="Bukti kegiatan"
+      title={title}
       right={file ? <span className="text-xs text-muted-foreground">PDF, JPG, PNG · 5 MB</span> : <StatusBadge status="needs_info" />}
     >
       <input

@@ -337,7 +337,7 @@ fun UpdateDialog(api: Api, release: AppRelease, onDismiss: () -> Unit) {
     )
 }
 
-// ponytail: izin "instal aplikasi tidak dikenal" tidak dicek sendiri; installer sistem sudah mengarahkan ke pengaturannya.
+// Catatan: izin "instal aplikasi tidak dikenal" tidak dicek sendiri; installer sistem sudah mengarahkan ke pengaturannya.
 private fun installApk(context: Context, apk: File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
     context.startActivity(

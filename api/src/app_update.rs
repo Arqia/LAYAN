@@ -21,7 +21,7 @@ pub async fn apk(State(s): State<AppState>) -> Result<Response, AppError> {
     Ok(res)
 }
 
-// ponytail: APK (~10 MB) dibaca utuh ke memori, sama seperti lampiran; ganti ke stream kalau ukurannya membengkak.
+// Catatan: APK (~10 MB) dibaca utuh ke memori, sama seperti lampiran; ganti ke stream kalau ukurannya membengkak.
 async fn file(s: &AppState, name: &str, mime: &'static str) -> Result<Response, AppError> {
     let bytes = tokio::fs::read(std::path::Path::new(&s.app_dir).join(name)).await.map_err(|_| AppError::NotFound)?;
     Ok(Response::builder()

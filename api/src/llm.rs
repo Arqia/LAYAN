@@ -59,6 +59,43 @@ impl Llm {
         }
     }
 
+    /// Klasifikasi gambar lampiran: "dokumen", "foto", "lainnya", atau "tidak_pantas".
+    /// None kalau tidak bisa dicek (mock atau provider error): lampiran tetap diterima, staf yang memeriksa saat approve.
+    pub async fn classify_image(&self, mime: &str, bytes: &[u8]) -> Option<&'static str> {
+        use base64::Engine;
+        let Self::Http { url, key, model, client } = self else { return None };
+        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let body = json!({
+            "model": model,
+            "messages": [{ "role": "user", "content": [
+                { "type": "text", "text": CLASSIFY_PROMPT },
+                { "type": "image_url", "image_url": { "url": format!("data:{mime};base64,{data}") } },
+            ]}],
+            "temperature": 0,
+            "max_tokens": 20,
+        });
+        let res = match client.post(url).bearer_auth(key).json(&body).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("klasifikasi gambar gagal: {e:#}");
+                return None;
+            }
+        };
+        let status = res.status();
+        let text = res.text().await.ok()?;
+        // Filter keamanan provider sendiri menolak gambarnya: pasti tidak pantas.
+        if ["PROHIBITED_CONTENT", "\"content_filter\"", "SAFETY"].iter().any(|k| text.contains(k)) {
+            return Some("tidak_pantas");
+        }
+        if !status.is_success() {
+            eprintln!("klasifikasi gambar gagal: LLM {status}: {}", text.chars().take(300).collect::<String>());
+            return None;
+        }
+        let v: Value = serde_json::from_str(&text).ok()?;
+        let answer = v["choices"][0]["message"]["content"].as_str().unwrap_or("").to_lowercase();
+        ["tidak_pantas", "dokumen", "foto", "lainnya"].into_iter().find(|l| answer.contains(l))
+    }
+
     async fn call(url: &str, key: &str, model: &str, client: &reqwest::Client, transcript: &[Value]) -> anyhow::Result<(Value, Usage)> {
         let mut messages = vec![json!({ "role": "system", "content": tools::system_prompt() })];
         messages.extend_from_slice(transcript);
@@ -98,6 +135,12 @@ impl Llm {
         Ok((msg, usage))
     }
 }
+
+const CLASSIFY_PROMPT: &str = "Kamu memeriksa gambar yang diupload mahasiswa ke layanan kampus. Jawab SATU kata saja:
+tidak_pantas = ada ketelanjangan, konten seksual, kekerasan/gore, atau hal tidak senonoh lain
+dokumen = foto, scan, atau screenshot surat, undangan, pengumuman, sertifikat, proposal, formulir, atau dokumen tertulis lain
+foto = foto ruangan, fasilitas, atau benda (mis. AC, proyektor, kursi)
+lainnya = selain itu (selfie, meme, pemandangan, gambar kosong)";
 
 pub struct Usage {
     pub input: i64,

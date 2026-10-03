@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 use crate::agent::insert_message;
 use crate::auth::{CurrentUser, Role};
 use crate::error::AppError;
-use crate::tools::{courses, merge_data};
+use crate::tools::{letter_fields, letter_of, merge_data};
 use crate::util::{clock, day_label, hm, now, parse_iso, today_start, when};
 use crate::AppState;
 
@@ -74,14 +74,7 @@ impl Req {
     /// Ringkasan satu baris untuk list.
     fn line(&self, d: &Value) -> String {
         match self.kind(d) {
-            "surat" => {
-                let n = courses(d).len();
-                [d["activity"].as_str().unwrap_or(""), d["dates"].as_str().unwrap_or(""), &format!("{n} mata kuliah")]
-                    .into_iter()
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }
+            "surat" => letter_fields(d).into_iter().map(|[_, v]| v).filter(|v| v != "-").collect::<Vec<_>>().join(", "),
             "booking" => format!("{} · {} orang", slot(d), d["people"].as_i64().unwrap_or(0)),
             _ => d["question"].as_str().unwrap_or("").to_owned(),
         }
@@ -131,7 +124,10 @@ pub async fn mine(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Vec
         let meta = match (r.kind(&d), r.status.as_str()) {
             (_, "rejected") => d["reject_reason"].as_str().unwrap_or("Ditolak staf").to_owned(),
             ("surat", "approved" | "done") => format!("{} · disetujui {}", d["letter_no"].as_str().unwrap_or(""), d["approved_by"].as_str().unwrap_or("staf")),
-            ("surat", "pending_approval") => format!("{} · menunggu staf", d["activity"].as_str().unwrap_or("")),
+            ("surat", "pending_approval") => match letter_fields(&d).first() {
+                Some([_, v]) => format!("{v} · menunggu staf"),
+                None => "Menunggu staf".into(),
+            },
             ("surat" | "booking", "needs_info") => "Menunggu data dari kamu".into(),
             ("surat", _) => "Sedang diproses agent".into(),
             ("booking", "approved") => format!("{} · terkonfirmasi", slot(&d)),
@@ -167,7 +163,7 @@ pub async fn detail(State(s): State<AppState>, me: CurrentUser, Path(id): Path<S
     let d = r.data();
     let text = |k: &str| d[k].as_str().unwrap_or("-").to_owned();
     let fields: Vec<[String; 2]> = match r.kind(&d) {
-        "surat" => vec![["Kegiatan".into(), text("activity")], ["Tanggal".into(), text("dates")], ["Mata kuliah".into(), courses(&d).join(", ")]],
+        "surat" => letter_fields(&d),
         "booking" => vec![
             ["Ruang".into(), slot(&d)],
             ["Keperluan".into(), text("purpose")],
@@ -246,13 +242,14 @@ pub async fn queue(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Ve
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         let d = r.data();
-        let files: Vec<(String, String, String, i64)> =
-            sqlx::query_as("SELECT id, name, mime, size FROM attachments WHERE request_id = ?1").bind(&r.id).fetch_all(&s.db).await?;
+        let files: Vec<(String, String, String, i64, Option<String>)> =
+            sqlx::query_as("SELECT id, name, mime, size, label FROM attachments WHERE request_id = ?1").bind(&r.id).fetch_all(&s.db).await?;
         let attachments: Vec<Value> = files
             .into_iter()
-            .map(|(id, name, mime, size)| {
+            .map(|(id, name, mime, size, label)| {
                 let kind = mime.rsplit('/').next().unwrap_or("file").to_uppercase().replace("JPEG", "JPG");
-                json!({ "id": id, "name": name, "meta": format!("{kind} · {} KB", size / 1024) })
+                let ai = label.map(|l| format!(" · dicek AI: {l}")).unwrap_or_default();
+                json!({ "id": id, "name": name, "meta": format!("{kind} · {} KB{ai}", size / 1024) })
             })
             .collect();
         let tl: Vec<Value> = timeline(&s.db, &r.id)
@@ -331,10 +328,10 @@ pub async fn decide(State(s): State<AppState>, me: CurrentUser, Path(id): Path<S
             )
             .fetch_one(&s.db)
             .await?;
-            let no = format!("SD/{ym}/{:04}", 142 + n);
+            let no = format!("{}/{ym}/{:04}", letter_of(&d).prefix, 142 + n);
             (
                 "approved",
-                format!("{} kamu sudah disetujui. Semangat lombanya!", r.title),
+                format!("{} kamu sudah disetujui. Suratnya bisa diunduh dari card ini atau dari Riwayat.", r.title),
                 Some(json!({ "kind": "done", "state": "active", "data": { "letter_no": no, "title": r.title, "approved_by": staf, "approved_at": at, "request_id": r.id } })),
                 json!({ "letter_no": no, "approved_by": staf, "approved_at": at }),
                 "approveRequest",
@@ -482,5 +479,34 @@ pub async fn metrics(State(s): State<AppState>, me: CurrentUser) -> Result<Json<
         "handled": handled,
         "auto_pct": if handled > 0 { auto * 100 / handled } else { 0 },
         "saved_minutes": saved,
+    })))
+}
+
+/// Angka publik untuk halaman /status: tanpa login, hanya hitungan (tanpa data pribadi).
+pub async fn public_stats(State(s): State<AppState>) -> Result<Json<Value>, AppError> {
+    let week = now() - 7 * 86_400;
+    let count = |sql: &'static str, since: i64| {
+        let db = s.db.clone();
+        async move { sqlx::query_scalar::<_, i64>(sql).bind(since).fetch_one(&db).await }
+    };
+
+    let requests = count("SELECT COUNT(*) FROM requests WHERE created_at >= ?1", 0).await?;
+    let requests_week = count("SELECT COUNT(*) FROM requests WHERE created_at >= ?1", week).await?;
+    let answers = count("SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND tool = 'answerWithCitation'", 0).await?;
+    let fixed_week = count("SELECT COUNT(*) FROM reports WHERE status = 'selesai' AND updated_at >= ?1", week).await?;
+    // rumus "selesai tanpa staf" sama dengan metrics(), tapi untuk 7 hari terakhir
+    let auto = count(
+        "SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND (tool IN ('answerWithCitation', 'reportDamage') OR (tool = 'checkLetterRequirements' AND result LIKE 'Belum terpenuhi%'))",
+        week,
+    )
+    .await?;
+    let to_staff = count("SELECT COUNT(*) FROM audit_log WHERE at >= ?1 AND tool IN ('submitForApproval', 'createTicket')", week).await?;
+
+    Ok(Json(json!({
+        "requests": requests,
+        "requests_week": requests_week,
+        "answers": answers,
+        "fixed_week": fixed_week,
+        "auto_pct_week": if auto + to_staff > 0 { auto * 100 / (auto + to_staff) } else { 0 },
     })))
 }

@@ -102,6 +102,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/staff/requests/{id}/decide", post(requests::decide))
         .route("/api/staff/requests/{id}/undo", post(requests::undo))
         .route("/api/staff/metrics", get(requests::metrics))
+        .route("/api/public/stats", get(requests::public_stats))
         .route("/api/reports", get(board::list))
         .route("/api/reports/{id}/status", post(board::set_status))
         .route("/api/app/latest", get(app_update::latest))

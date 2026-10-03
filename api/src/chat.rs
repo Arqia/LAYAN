@@ -105,13 +105,19 @@ pub async fn upload(State(s): State<AppState>, me: CurrentUser, mut mp: Multipar
     if bytes.len() > MAX_UPLOAD {
         return Err(too_big());
     }
+    // Catatan: hanya gambar yang dicek; PDF lolos tanpa label (staf tetap memeriksa saat approve).
+    let label = if mime.starts_with("image/") { s.llm.classify_image(&mime, &bytes).await } else { None };
+    if label == Some("tidak_pantas") {
+        eprintln!("lampiran ditolak: gambar tidak pantas (user {})", me.user.id);
+        return Err(AppError::Bad("Gambar ini tidak pantas untuk layanan kampus dan tidak disimpan. Upload foto atau scan dokumen yang sesuai.".into()));
+    }
 
     let id = crate::util::random_hex(16);
     let path = std::path::Path::new(&s.upload_dir).join(&id);
     tokio::fs::create_dir_all(&s.upload_dir).await.map_err(anyhow::Error::from)?;
     tokio::fs::write(&path, &bytes).await.map_err(anyhow::Error::from)?;
-    sqlx::query("INSERT INTO attachments (id, owner_id, name, mime, size, path) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-        .bind(&id).bind(&me.user.id).bind(&name).bind(&mime).bind(bytes.len() as i64).bind(path.to_string_lossy())
+    sqlx::query("INSERT INTO attachments (id, owner_id, name, mime, size, path, label) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+        .bind(&id).bind(&me.user.id).bind(&name).bind(&mime).bind(bytes.len() as i64).bind(path.to_string_lossy()).bind(label)
         .execute(&s.db)
         .await?;
     Ok(Json(json!({ "id": id, "name": name, "size": bytes.len() })))

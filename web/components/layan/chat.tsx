@@ -8,7 +8,7 @@ import type { Check, Worker } from "@/lib/data"
 import { api, stream, type AgentEvent, type ChatMessage } from "@/lib/api"
 import {
   AnswerCard, BookingHeldCard, ChecksCard, CollapsedCard, DraftCard, FormCard, LetterDoneCard, ReportCard, RoomsCard, TicketCard,
-  UPLOAD_INPUT_ID, UploadCard, type Answer, type Held, type LetterDone, type ReportData, type RoomsData, type Ticket,
+  UPLOAD_INPUT_ID, UploadCard, type Answer, type Held, type LetterDone, type ReportData, type RoomsData, type Ticket, type FormField,
 } from "./action-cards"
 import { AccountPill } from "./app-bar"
 import { AgentAvatar, FileTypeTile, Mark, TypingDots, WorkerTile, formatSize } from "./primitives"
@@ -27,7 +27,7 @@ function subscribe(cb: () => void) {
 const useOnline = () => useSyncExternalStore(subscribe, () => navigator.onLine, () => true)
 
 const SHORTCUTS: { worker: Worker; title: string; sub: string; prompt: string }[] = [
-  { worker: "surat", title: "Minta surat dispensasi", sub: "Izin lomba atau kegiatan", prompt: "Kak, aku mau minta surat izin lomba tanggal 10–12 Oktober" },
+  { worker: "surat", title: "Minta surat akademik", sub: "Dispensasi, aktif kuliah, magang, penelitian, beasiswa", prompt: "Aku butuh surat keterangan aktif kuliah untuk daftar beasiswa" },
   { worker: "helpdesk", title: "Tanya aturan akademik", sub: "SKS, cuti, nilai. Lengkap dengan sumber", prompt: "Batas maksimal SKS kalau IP semester lalu 3,2 berapa?" },
   { worker: "fasilitas", title: "Lapor kerusakan / booking ruangan", sub: "Cek bentrok, langsung ke teknisi", prompt: "Mau booking ruang rapat Jumat 13.00–15.00, 20 orang" },
 ]
@@ -287,12 +287,14 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
     const skipped = c.state === "skipped"
     switch (c.kind) {
       case "form":
-        if (c.state !== "active") return <CollapsedCard worker="surat" title="Data kegiatan" note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
-        return <FormCard onSubmit={(v) => act(m.id, "submit", v)} />
-      case "upload":
-        if (failed?.messageId === m.id) return <CollapsedCard worker="surat" title="Bukti kegiatan" note="Menunggu upload" tone="warn" />
-        if (c.state !== "active") return <CollapsedCard worker="surat" title="Bukti kegiatan" note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
-        return <UploadCard onUpload={(f) => upload(m.id, f)} />
+        if (c.state !== "active") return <CollapsedCard worker="surat" title="Data surat" note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
+        return <FormCard fields={d.fields as FormField[] | undefined} onSubmit={(v) => act(m.id, "submit", v)} />
+      case "upload": {
+        const what = (d.title as string) ?? "Bukti kegiatan"
+        if (failed?.messageId === m.id) return <CollapsedCard worker="surat" title={what} note="Menunggu upload" tone="warn" />
+        if (c.state !== "active") return <CollapsedCard worker="surat" title={what} note={skipped ? "Dilewati" : "Terkirim"} tone={skipped ? "muted" : "ok"} />
+        return <UploadCard title={what} onUpload={(f) => upload(m.id, f)} />
+      }
       case "checks":
         return <ChecksCard checks={d.checks as Check[]} footer={(d.footer as { note: string } | null) ?? undefined} />
       case "draft":

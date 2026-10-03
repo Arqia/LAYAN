@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -70,12 +71,22 @@ fun FileTile(name: String, onPrimary: Boolean = false) {
 
 /* ---------- 1 · Form data kurang ---------- */
 
+/** Field form surat dari server (`LETTERS` di api/src/tools.rs). */
+data class FormField(val key: String, val label: String, val placeholder: String, val helper: String)
+
+// card form dari sebelum field dikirim server (data kosong) selalu dispensasi
+private val LEGACY_FIELDS = listOf(
+    FormField("activity", "Nama kegiatan", "Gemastik 2026", ""),
+    FormField("courses", "Mata kuliah yang terlewat", "Struktur Data, Sistem Digital", "Pisahkan dengan koma. Dosen pengampu aku isi otomatis."),
+)
+
 @Composable
-fun FormCard(busy: Boolean, onSubmit: (activity: String, courses: String) -> Unit) {
-    var activity by remember { mutableStateOf("") }
-    var courses by remember { mutableStateOf("") }
-    val valid = activity.isNotBlank() && courses.isNotBlank()
-    CardShell("surat", "Lengkapi data kegiatan", right = { Text("2 field", style = t(12, 600, color = C.mutedFg)) }) {
+fun FormCard(d: JsonObject, busy: Boolean, onSubmit: (Map<String, String>) -> Unit) {
+    val fields = (d["fields"] as? JsonArray)?.map { it.jsonObject }?.map { FormField(it.s("key"), it.s("label"), it.s("placeholder"), it.s("helper")) }
+        ?.takeIf { it.isNotEmpty() } ?: LEGACY_FIELDS
+    val values = remember { mutableStateMapOf<String, String>() }
+    val valid = fields.all { values[it.key].orEmpty().isNotBlank() }
+    CardShell("surat", "Lengkapi data surat", right = { Text("${fields.size} field", style = t(12, 600, color = C.mutedFg)) }) {
         Body {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(C.muted).padding(horizontal = 10.dp, vertical = 8.dp),
@@ -84,18 +95,19 @@ fun FormCard(busy: Boolean, onSubmit: (activity: String, courses: String) -> Uni
                 Icon(Lucide.CircleCheck, null, tint = C.ok, modifier = Modifier.size(14.dp))
                 Text("Nama, NIM, prodi sudah terisi dari profil", style = t(12, color = C.mutedFg))
             }
-            Field("Nama kegiatan", activity, { activity = it }, "Contoh: Gemastik 2026")
-            Field("Mata kuliah yang terlewat", courses, { courses = it }, "Contoh: Struktur Data, Sistem Digital", helper = "Pisahkan dengan koma. Dosen pengampu aku isi otomatis.")
+            fields.forEach { f ->
+                Field(f.label, values[f.key].orEmpty(), { values[f.key] = it }, if (f.placeholder.isNotBlank()) "Contoh: ${f.placeholder}" else "", helper = f.helper.ifBlank { null })
+            }
         }
-        Footer { PrimaryButton(if (busy) "Mengirim…" else "Kirim", { onSubmit(activity.trim(), courses.trim()) }, Modifier.fillMaxWidth(), enabled = valid && !busy) }
+        Footer { PrimaryButton(if (busy) "Mengirim…" else "Kirim", { onSubmit(fields.associate { it.key to values[it.key].orEmpty().trim() }) }, Modifier.fillMaxWidth(), enabled = valid && !busy) }
     }
 }
 
 /* ---------- 2 · Upload lampiran ---------- */
 
 @Composable
-fun UploadCard(picked: Picked?, error: String?, busy: Boolean, onPick: () -> Unit, onUpload: () -> Unit) {
-    CardShell("surat", "Bukti kegiatan", right = { if (picked == null) StatusBadge("needs_info") else Text("PDF, JPG, PNG · 5 MB", style = t(12, color = C.mutedFg)) }) {
+fun UploadCard(title: String, picked: Picked?, error: String?, busy: Boolean, onPick: () -> Unit, onUpload: () -> Unit) {
+    CardShell("surat", title, right = { if (picked == null) StatusBadge("needs_info") else Text("PDF, JPG, PNG · 5 MB", style = t(12, color = C.mutedFg)) }) {
         Column(pad, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (picked != null) {
                 Row(
