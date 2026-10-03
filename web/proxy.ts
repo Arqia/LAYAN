@@ -9,10 +9,12 @@ const AREA: [string, Role][] = [
   ["/app", "mahasiswa"],
 ]
 
+const PUBLIC = new Set(["/", "/faq", "/unduh", "/status", "/keamanan", "/untuk-staf"])
+
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl
-  // landing page publik
-  if (pathname === "/") return NextResponse.next()
+  // landing page dan halaman informasi publik
+  if (PUBLIC.has(pathname)) return NextResponse.next()
   const toLogin = () => {
     const url = new URL("/login", req.url)
     url.searchParams.set("next", pathname + search)
@@ -43,5 +45,5 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   // aset publik & PWA tidak perlu login
-  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|version|sw.js|pwa-icon|icon|apple-icon|offline).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|version|sw.js|pwa-icon|icon|apple-icon|offline|opengraph-image|qr-apk.svg).*)"],
 }

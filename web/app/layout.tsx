@@ -13,8 +13,11 @@ const jakarta = Plus_Jakarta_Sans({ variable: "--font-jakarta", subsets: ["latin
 const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], weight: ["400", "500", "600"] })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_URL ?? "https://layan.codewithus.me"),
   title: "LAYAN",
   description: "Satu loket chat untuk mengurus layanan kampus sampai selesai.",
+  openGraph: { siteName: "LAYAN", type: "website", locale: "id_ID" },
+  twitter: { card: "summary_large_image" },
   appleWebApp: { capable: true, title: "LAYAN", statusBarStyle: "default" },
 }
 

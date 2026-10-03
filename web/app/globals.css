@@ -177,8 +177,10 @@
 }
 
 /* Landing page (/) */
-/* saklar Animasi di navbar menulis data-motion; default-nya dari setelan "kurangi animasi" perangkat */
-.layan-landing[data-motion="off"] *, .layan-landing[data-motion="off"] *::before, .layan-landing[data-motion="off"] *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
+/* saklar Animasi di navbar menulis data-motion; default-nya dari setelan "kurangi animasi" perangkat.
+   Saklar itu sendiri dikecualikan supaya knob tetap bergeser saat dimatikan. */
+.layan-landing { overflow-anchor: none }
+.layan-landing[data-motion="off"] :not([role="switch"], [role="switch"] *), .layan-landing[data-motion="off"] *::before, .layan-landing[data-motion="off"] *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
 @keyframes layanPulse { 0% { box-shadow: 0 0 0 0 rgba(10,122,102,.45) } 70% { box-shadow: 0 0 0 7px rgba(10,122,102,0) } 100% { box-shadow: 0 0 0 0 rgba(10,122,102,0) } }
 @keyframes layanBlink { 0%, 50% { opacity: 1 } 51%, 100% { opacity: 0 } }
 @keyframes layanDot { 0%, 80%, 100% { transform: translateY(0); opacity: .35 } 40% { transform: translateY(-4px); opacity: 1 } }
