@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { HOME } from "@/lib/data"
+import { Mark } from "@/components/layan/primitives"
 import { useStore } from "@/components/layan/store"
 
 // Landing page publik.
@@ -208,7 +209,6 @@ const MSG_IN = "animate-[layanMsgIn_.6s_cubic-bezier(.2,.7,.2,1)_both]"
 const BTN_DARK = "inline-flex cursor-pointer items-center whitespace-nowrap rounded-full bg-ink font-semibold text-ink-foreground transition-all duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:-translate-y-0.5 active:scale-[.98]"
 const BTN_LINE = "inline-flex cursor-pointer items-center whitespace-nowrap rounded-full border border-input font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground hover:bg-card active:scale-[.98]"
 const BTN_ACC = "inline-flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground transition-all duration-250 hover:-translate-y-px hover:bg-primary-hover active:scale-[.98]"
-const TAG = "rounded-full border px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
 
 function Icon({ d, size = 20, sw = 1.6 }: { d: string; size?: number; sw?: number }) {
   return (
@@ -222,17 +222,26 @@ const Up = ({ size = 18 }: { size?: number }) => <Icon d="M12 19V5M6 11l6-6 6 6"
 const Check = ({ size = 14 }: { size?: number }) => <Icon d="M5 12.5l4.5 4.5L19 7.5" size={size} sw={2.2} />
 const Download = () => <Icon d="M12 4v11M7 10l5 5 5-5M5 20h14" size={18} sw={1.8} />
 
-function Logo({ size }: { size: number }) {
-  const bar = Math.max(2, Math.round(size / 10))
+function DoodleArrow({ className }: { className?: string }) {
   return (
-    <span aria-hidden className="inline-flex shrink-0 flex-col justify-center bg-primary" style={{ width: size, height: size, borderRadius: size * 0.31, gap: bar + 1, padding: `0 ${Math.round(size * 0.24)}px` }}>
-      <span className="w-full rounded-sm bg-primary-foreground" style={{ height: bar }} />
-      <span className="w-[60%] rounded-sm bg-primary-foreground" style={{ height: bar }} />
-    </span>
+    <svg aria-hidden viewBox="0 0 120 100" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 86 C36 68 58 60 90 46" />
+      <path d="M74 40 L92 44 L82 60" />
+    </svg>
   )
 }
 
-const Pulse = () => <span className="size-1.5 shrink-0 rounded-full bg-primary animate-[layanPulse_2.4s_infinite]" />
+function Sparkles({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 120 90" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" className={className}>
+      <path d="M28 8 v24 M16 20 h24" />
+      <path d="M84 46 v18 M75 55 h18" />
+      <circle cx="102" cy="18" r="6" />
+      <circle cx="52" cy="68" r="4" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 const Dots = () => (
   <span className="flex gap-[5px]">
     {[0, 0.15, 0.3].map((d) => (
@@ -240,24 +249,6 @@ const Dots = () => (
     ))}
   </span>
 )
-
-function ChatHead({ size, status, right }: { size: number; status: string; right?: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b px-[18px] py-3.5">
-      <div className="flex items-center gap-2.5">
-        <Logo size={size} />
-        <div>
-          <div className="text-[14.5px] font-semibold">LAYAN</div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Pulse />
-            {status}
-          </div>
-        </div>
-      </div>
-      {right}
-    </div>
-  )
-}
 
 /** Tombol yang sedikit tertarik ke kursor. Transform di wrapper supaya hover tombol tetap jalan. */
 function Magnetic({ children, strength = 0.28 }: { children: ReactNode; strength?: number }) {
@@ -338,7 +329,6 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
       </div>
 
       <div data-reveal data-delay="160" className={CARD}>
-        <ChatHead size={30} status={t.chatStatus} right={<span className={TAG}>{t.sampleTag}</span>} />
         {/* key: ganti layanan = percakapan diputar ulang dari awal */}
         <div key={s.k + t.sampleTag} role="tabpanel" aria-live="polite" className="flex min-h-[380px] flex-col justify-end gap-3.5 p-[clamp(16px,2.4vw,24px)]">
           <div className={`${USER_BUBBLE} ${MSG_IN}`}>{s.q}</div>
@@ -551,8 +541,11 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
         </div>
 
         <div className={`flex h-[min(560px,70dvh)] flex-col lg:h-[min(620px,calc(100dvh-200px))] ${CARD}`}>
-          <ChatHead size={30} status={t.chatStatus} right={stage >= 1 && sub + stage > 1 ? <span className={`rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground ${MSG_IN}`}>{t.sDetected}</span> : undefined} />
           <div aria-live="polite" className="flex min-h-0 flex-1 flex-col justify-end gap-3.5 overflow-hidden p-[clamp(16px,2.4vw,24px)] [mask-image:linear-gradient(to_bottom,transparent,#000_40px)]">
+            <div className="flex flex-col gap-1 text-[length:clamp(22px,2.3vw,32px)] font-semibold leading-[1.15] tracking-[-.03em]">
+              <div className="text-subtle-foreground">{t.greet1}</div>
+              <div>{t.greet2}</div>
+            </div>
             {stage >= 1 && <div className={`${USER_BUBBLE} ${MSG_IN}`}>{t.sPrompt}</div>}
 
             {stage === 1 && (
@@ -886,7 +879,7 @@ export function Landing() {
           style={{ maxWidth: nav.maxW, height: nav.h, padding: `0 ${nav.inner}`, background: nav.bg, borderColor: nav.bd, backdropFilter: nav.blur, WebkitBackdropFilter: nav.blur, boxShadow: nav.sh }}
         >
           <a href="#top" onClick={link("top")} aria-label="LAYAN" className="flex items-center gap-2.5 text-[17px] font-extrabold tracking-[.04em] text-foreground">
-            <Logo size={26} />
+            <Mark size={26} />
             LAYAN
           </a>
           <div className="hidden items-center gap-0.5 min-[1080px]:flex">
@@ -899,8 +892,8 @@ export function Landing() {
           <div className="flex items-center gap-2.5">
             <button type="button" role="switch" aria-checked={motion === "on"} onClick={toggleMotion} className={`hidden h-11 pl-4 pr-1.5 min-[1080px]:flex cursor-pointer items-center gap-2.5 rounded-full border bg-card/60 text-[13.5px] font-medium transition-colors duration-300 hover:text-foreground ${motion === "on" ? "text-foreground" : "text-muted-foreground"}`}>
               {t.motionLabel}
-              <span aria-hidden className={`relative h-5 w-9 rounded-full transition-colors duration-300 ${motion === "on" ? "bg-primary" : "bg-input"}`}>
-                <span className={`absolute top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-[cubic-bezier(.3,1.4,.5,1)] ${motion === "on" ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+              <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${motion === "on" ? "bg-primary" : "bg-input"}`}>
+                <span className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-out ${motion === "on" ? "translate-x-4" : "translate-x-0"}`} />
               </span>
             </button>
             <div role="group" aria-label={t.langLabel} className="flex rounded-full border bg-card/60 p-1">
@@ -930,8 +923,8 @@ export function Landing() {
           ))}
           <button type="button" role="switch" aria-checked={motion === "on"} onClick={toggleMotion} className={`mt-1 flex h-12 justify-between px-3.5 cursor-pointer items-center gap-2.5 rounded-full border bg-card/60 text-[13.5px] font-medium transition-colors duration-300 hover:text-foreground ${motion === "on" ? "text-foreground" : "text-muted-foreground"}`}>
             {t.motionLabel}
-            <span aria-hidden className={`relative h-5 w-9 rounded-full transition-colors duration-300 ${motion === "on" ? "bg-primary" : "bg-input"}`}>
-              <span className={`absolute top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-[cubic-bezier(.3,1.4,.5,1)] ${motion === "on" ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+            <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${motion === "on" ? "bg-primary" : "bg-input"}`}>
+              <span className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-out ${motion === "on" ? "translate-x-4" : "translate-x-0"}`} />
             </span>
           </button>
         </div>
@@ -940,6 +933,8 @@ export function Landing() {
       <main>
         {/* 01 Hero: layar lebar sinematik (sticky 210vh), chat naik & membesar saat di-scroll */}
         <section id="top" ref={heroWrap} className={`relative overflow-x-clip ${C("min-[900px]:h-[210vh]")}`}>
+          {/* cahaya lembut di atas hero supaya latar tidak datar; ikut token tema */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_44%_at_50%_0%,var(--accent)_0%,transparent_70%)]" />
           <div className={`relative pb-[72px] ${C("min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-dvh min-[900px]:overflow-hidden min-[900px]:pb-0")}`}>
             <div ref={heroHead} className={`relative mx-auto max-w-[1376px] pt-[clamp(112px,16vh,152px)] ${GUTTER} will-change-[transform,opacity] ${C("min-[900px]:flex min-[900px]:h-full min-[900px]:flex-col min-[900px]:justify-center min-[900px]:pt-16")}`}>
               <h1 className="text-[length:clamp(44px,min(7vw,12vh),116px)] font-semibold leading-[1] tracking-[-.045em]">
@@ -975,8 +970,9 @@ export function Landing() {
             </div>
 
             <div ref={heroChat} className={`relative inset-x-0 mx-auto mt-14 w-[min(960px,calc(100%-32px))] origin-top will-change-transform ${C("min-[900px]:absolute min-[900px]:top-full min-[900px]:mt-0")}`}>
+              <DoodleArrow className="pointer-events-none absolute -left-20 top-8 hidden w-24 text-primary opacity-50 min-[1280px]:block" />
+              <Sparkles className="pointer-events-none absolute -right-16 top-20 hidden w-24 text-primary opacity-40 min-[1280px]:block" />
               <div className="overflow-hidden rounded-[28px] border bg-card shadow-[0_1px_0_rgba(22,24,26,.04),0_50px_120px_-60px_rgba(22,24,26,.4)]">
-                <ChatHead size={34} status={t.chatStatus} />
                 <div className="flex flex-col gap-[22px] p-[clamp(20px,3vw,36px)]">
                   <div className="text-[length:clamp(22px,2.3vw,32px)] font-semibold leading-[1.15] tracking-[-.03em]">
                     <div className="text-subtle-foreground">{t.greet1}</div>
@@ -1068,7 +1064,7 @@ export function Landing() {
           <footer className={`border-t py-6 ${GUTTER}`}>
             <div className="mx-auto flex max-w-[1376px] flex-wrap items-center justify-between gap-4 text-[13.5px] text-muted-foreground">
               <div className="flex items-center gap-2.5 text-[15px] font-extrabold tracking-[.04em] text-foreground">
-                <Logo size={22} />
+                <Mark size={22} />
                 LAYAN
                 <span className="text-[13.5px] font-normal tracking-normal text-muted-foreground">{t.foot}</span>
               </div>
@@ -1092,7 +1088,7 @@ export function Landing() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 text-base font-extrabold tracking-[.04em]">
-              <Logo size={28} />
+              <Mark size={28} />
               LAYAN
             </div>
             <button type="button" onClick={() => setIntent(null)} aria-label={t.mClose} className="flex size-11 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
