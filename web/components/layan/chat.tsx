@@ -11,6 +11,7 @@ import {
   UPLOAD_INPUT_ID, UploadCard, type Answer, type Held, type LetterDone, type ReportData, type RoomsData, type Ticket, type FormField,
 } from "./action-cards"
 import { AccountPill } from "./app-bar"
+import { HistorySidebar } from "./history"
 import { AgentAvatar, FileTypeTile, Mark, TypingDots, WorkerTile, formatSize } from "./primitives"
 import { useStore } from "./store"
 
@@ -135,7 +136,7 @@ function FailedUpload({ file, onRetry, disabled }: { file: File; onRetry: () => 
 function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
   const { me } = useStore()
   return (
-    <div className="flex min-h-full flex-col gap-7 px-5 pb-5 pt-10">
+    <div className="flex min-h-full flex-col gap-7 px-5 pb-5 pt-10 lg:mx-auto lg:w-full lg:max-w-[760px]">
       <div className="flex flex-col gap-2.5">
         <AgentAvatar size={44} />
         <h1 className="mt-2 text-[30px] font-bold leading-9 tracking-[-0.02em]">Halo, {me?.name.split(" ")[0] ?? "kamu"}</h1>
@@ -168,7 +169,7 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
 
 function Skeleton() {
   return (
-    <div className="flex min-h-full flex-col justify-end gap-3 p-4" aria-label="Memuat percakapan">
+    <div className="flex min-h-full flex-col justify-end gap-3 p-4 lg:mx-auto lg:w-full lg:max-w-[760px]" aria-label="Memuat percakapan">
       {["ml-auto w-2/3", "w-3/4", "w-4/5 h-40", "ml-auto w-1/2"].map((c) => (
         <div key={c} className={cn("h-11 animate-pulse rounded-[18px] bg-muted", c)} />
       ))}
@@ -322,11 +323,14 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
   const uploadActive = messages?.some((m) => m.card?.kind === "upload" && m.card.state === "active" && failed?.messageId !== m.id)
 
   return (
-    <div className="mx-auto flex h-dvh max-w-[480px] flex-col bg-background sm:border-x">
+    <div className="flex h-dvh bg-background">
+      {/* layar lebar (laptop): riwayat di samping, chat melebar. HP tetap satu kolom. */}
+      <HistorySidebar refresh={messages?.length ?? 0} />
+    <div className="mx-auto flex h-dvh w-full max-w-[480px] flex-col bg-background sm:border-x lg:max-w-none lg:flex-1 lg:border-x-0">
       <MobileHeader
         bordered={!empty || !online}
         right={
-          <Link href="/app/riwayat" aria-label="Riwayat permintaan" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted">
+          <Link href="/app/riwayat" aria-label="Riwayat permintaan" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted lg:hidden">
             <History className="size-[21px]" />
           </Link>
         }
@@ -346,7 +350,7 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
         ) : empty ? (
           <EmptyState onPick={send} />
         ) : (
-          <div className="flex min-h-full flex-col justify-end gap-3 p-4">
+          <div className="flex min-h-full flex-col justify-end gap-3 p-4 lg:mx-auto lg:w-full lg:max-w-[760px]">
             {messages.map((m) =>
               m.sender === "user" ? (
                 m.file ? (
@@ -380,7 +384,7 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
       )}
 
       <form
-        className="flex flex-none items-end gap-2 border-t bg-background px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))]"
+        className="flex flex-none items-end gap-2 border-t bg-background px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))] lg:px-[max(12px,calc((100%-760px)/2))]"
         onSubmit={(e) => {
           e.preventDefault()
           send(text)
@@ -413,6 +417,7 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
           <ArrowUp className="size-5" />
         </button>
       </form>
+    </div>
     </div>
   )
 }

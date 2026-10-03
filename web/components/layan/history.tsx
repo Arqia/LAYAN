@@ -25,7 +25,7 @@ type Detail = {
 
 function Frame({ title, back, children, footer }: { title: string; back: string; children: ReactNode; footer?: ReactNode }) {
   return (
-    <div className="mx-auto flex h-dvh max-w-[480px] flex-col bg-background sm:border-x">
+    <div className="mx-auto flex h-dvh max-w-[480px] flex-col bg-background sm:border-x lg:max-w-[760px]">
       <header className="flex h-14 flex-none items-center gap-1 pl-2 pr-4">
         <Link href={back} aria-label="Kembali" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted">
           <ArrowLeft className="size-[22px]" />
@@ -142,6 +142,40 @@ export function HistoryList() {
           ))}
       </div>
     </Frame>
+  )
+}
+
+/** Riwayat di samping chat, hanya di layar lebar. `refresh` berubah tiap ada pesan baru supaya status ikut terbarui. */
+export function HistorySidebar({ refresh }: { refresh: number }) {
+  const [items, setItems] = useState<Item[] | null>(null)
+  useEffect(() => {
+    api<Item[]>("/requests").then(setItems, () => setItems((v) => v ?? []))
+  }, [refresh])
+
+  return (
+    <aside className="hidden w-[320px] flex-none flex-col border-r bg-card lg:flex">
+      <div className="flex h-14 flex-none items-center px-4">
+        <h2 className="text-[15px] font-bold">Riwayat permintaan</h2>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        {!items && <ListSkeleton />}
+        {items?.length === 0 && (
+          <p className="px-3 py-6 text-[13px] leading-[19px] text-muted-foreground">Belum ada permintaan. Minta surat, tanya aturan, atau lapor kerusakan lewat chat.</p>
+        )}
+        {items?.map((it) => (
+          <Link key={it.id} href={`/app/riwayat/${it.id}`} className="flex items-start gap-3 rounded-md p-2.5 hover:bg-background">
+            <WorkerTile worker={it.worker} size={32} />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-[13px] font-semibold">{it.title}</span>
+                <span className="whitespace-nowrap text-[11px] text-muted-foreground">{it.time}</span>
+              </div>
+              <StatusBadge status={it.status} />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </aside>
   )
 }
 
