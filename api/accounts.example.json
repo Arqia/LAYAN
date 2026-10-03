@@ -12,9 +12,9 @@
     "ipk": 3.62
   },
   {
-    "id": "admin3",
+    "id": "admin1",
     "role": "admin",
-    "name": "Admin 3",
+    "name": "Admin 1",
     "email": "admin1-xxxxx@layan.test",
     "password": "ganti-ini"
   }
