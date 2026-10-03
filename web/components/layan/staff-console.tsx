@@ -334,8 +334,8 @@ export function StaffConsole() {
   }
 
   const chips = [
-    { label: "Lampiran tidak valid", text: `Lampiran belum menunjukkan nama ${first} sebagai peserta. Upload surat undangan atau pengumuman yang mencantumkan nama, lalu ajukan ulang.` },
-    { label: "Data tidak sesuai", text: "Tanggal kegiatan di permintaan berbeda dengan lampiran. Cek ulang tanggal, lalu ajukan ulang lewat chat." },
+    { label: "Lampiran tidak valid", text: `Lampiran belum sesuai atau belum mencantumkan nama ${first}. Upload dokumen yang benar, lalu ajukan ulang lewat chat.` },
+    { label: "Data tidak sesuai", text: "Data di permintaan berbeda dengan dokumen pendukung. Cek ulang isiannya, lalu ajukan ulang lewat chat." },
     { label: "Di luar ketentuan", text: "Permintaan ini di luar ketentuan yang berlaku. Silakan datang ke Layanan Akademik di jam kerja untuk dibantu." },
   ]
 

@@ -18,8 +18,22 @@ const USERS: &[Row] = &[
 /// Isi akun demo dan laporan awal board teknisi, masing-masing sekali saat tabelnya kosong.
 pub async fn run(db: &SqlitePool) -> anyhow::Result<()> {
     users(db).await?;
+    academic(db).await?;
     reports(db).await?;
     fridays(db).await
+}
+
+/// IPK akun demo (syarat rekomendasi beasiswa) dan Nadia semester 5 (syarat pengantar magang).
+/// Diisi sekali per akun, juga untuk DB yang sudah ada sebelum kolom ipk ditambahkan.
+async fn academic(db: &SqlitePool) -> anyhow::Result<()> {
+    // bima: IPK di bawah 3,00 dan UKT belum lunas, contoh syarat tidak lolos
+    for (id, ipk, semester) in [("raka", 3.62, None), ("nadia", 3.41, Some(5)), ("bima", 2.87, None)] {
+        sqlx::query("UPDATE users SET ipk = ?2, semester = COALESCE(?3, semester) WHERE id = ?1 AND ipk IS NULL")
+            .bind(id).bind(ipk).bind(semester)
+            .execute(db)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Rapat dosen rutin di G2.4 tiap Jumat 13:00-15:00 (4 minggu ke depan), supaya demo

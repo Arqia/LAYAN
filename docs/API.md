@@ -27,7 +27,7 @@ Error selalu `{ "error": "pesan siap tampil ke pengguna" }` dengan status 4xx/5x
 | GET | `/api/chat` | mahasiswa | riwayat pesan: `ChatMessage[]` |
 | POST | `/api/chat` | mahasiswa | body `{text}` (maks 2000 huruf) → **stream SSE** |
 | POST | `/api/chat/action` | mahasiswa | body `{message_id, action, payload}`; `action` = `submit` \| `upload` \| `ticket` → **stream SSE** |
-| POST | `/api/attachments` | mahasiswa | multipart, satu file PDF/JPG/PNG ≤ 5 MB → `{id, name, size}` |
+| POST | `/api/attachments` | mahasiswa | multipart, satu file PDF/JPG/PNG ≤ 5 MB → `{id, name, size}`. Gambar diklasifikasi LLM (lihat Klasifikasi lampiran) |
 | GET | `/api/attachments/{id}` | pemilik, staf, teknisi | isi file |
 | GET | `/api/requests` | mahasiswa | riwayat permintaan: `[{id, worker, kind, title, status, time, meta, active}]` |
 | GET | `/api/requests/{id}` | mahasiswa | detail: `{id, worker, kind, title, status, fields, steps, letter, letter_no, approved_by, approved_at, reject_reason, student}` |
@@ -37,6 +37,7 @@ Error selalu `{ "error": "pesan siap tampil ke pengguna" }` dengan status 4xx/5x
 | GET | `/api/staff/metrics` | staf | `{tokens, total, by, avg_minutes, auto, handled, auto_pct, saved_minutes}` |
 | GET | `/api/reports` | staf, teknisi | kartu laporan kerusakan untuk Board |
 | POST | `/api/reports/{id}/status` | teknisi | body `{status}`; `baru` \| `dikerjakan` \| `selesai` |
+| GET | `/api/public/stats` | publik | hitungan tanpa data pribadi untuk halaman `/status`: `{requests, requests_week, answers, fixed_week, auto_pct_week}` |
 | GET | `/api/app/latest` | publik | rilis App Android terbaru (404 kalau belum ada), lihat di bawah |
 | GET | `/api/app/layan.apk` | publik | file APK terbaru; dipakai tombol "Unduh Android" di landing |
 
@@ -68,6 +69,41 @@ Ada 10 `kind`: `form`, `upload`, `checks`, `draft`, `answer`, `ticket` (`api/src
 `rooms`, `held`, `report` (`api/src/fasilitas.rs`), `done` (`api/src/requests.rs`).
 Bentuk `data` tiap kind: lihat produsen di file tersebut dan renderer di `web/components/layan/action-cards.tsx`
 (PWA) atau `android/.../ui/Cards.kt` (Android).
+
+### Card surat (`form`, `upload`)
+
+Isian surat ditentukan server, klien cukup merender ulang:
+
+- `form`: `data = {title, fields: [{key, label, placeholder, helper}]}`. Aksi `submit` mengirim `payload` berisi
+  `{<key>: "nilai", ...}` untuk setiap field. Khusus `courses` (dispensasi), isinya dipisah koma.
+- `upload`: `data = {title}`, judul lampiran yang diminta (mis. "Bukti kegiatan", "Proposal penelitian").
+
+## Jenis surat
+
+Semua jenis memakai worker `surat`, alur tool yang sama, dan bentuk surat `{title, body1, body2}`. Definisinya ada di
+`LETTERS` (`api/src/tools.rs`). `requests.data.type` menyimpan key-nya; permintaan lama tanpa `type` dianggap dispensasi.
+
+| `type` | Surat | Prefiks nomor | Lampiran | Syarat tambahan |
+|---|---|---|---|---|
+| `dispensasi` | Surat Dispensasi | `SD` | Bukti kegiatan | - |
+| `aktif` | Surat Keterangan Aktif Kuliah | `SKA` | - | - |
+| `magang` | Surat Pengantar Magang/KP | `SPM` | - | semester ≥ 5 |
+| `penelitian` | Surat Izin Penelitian/Survei | `SIP` | Proposal penelitian | - |
+| `beasiswa` | Surat Rekomendasi Beasiswa | `SRB` | - | IPK ≥ 3,00 |
+
+Syarat umum semua jenis: status aktif dan UKT lunas. Detail permintaan (`GET /api/requests/{id}`) dan antrean staf
+menampilkan isian surat sebagai `fields: [[label, nilai], ...]`.
+
+## Klasifikasi lampiran
+
+Setiap JPG/PNG yang diupload dikirim ke LLM (`Llm::classify_image`, `api/src/llm.rs`) dan diberi label di
+`attachments.label`: `dokumen`, `foto`, atau `lainnya`.
+
+- `tidak_pantas` (ketelanjangan, seksual, kekerasan, atau diblokir filter keamanan provider): upload ditolak 400, file tidak disimpan.
+- Lampiran surat (`requestAttachment`) wajib berlabel `dokumen`, selain itu aksi `upload` ditolak dengan pesan untuk upload ulang.
+- Foto laporan kerusakan cukup lolos cek `tidak_pantas`.
+- Label `NULL` (PDF, agent mock, atau LLM gagal) tetap diterima; staf memeriksa saat approve. Antrean staf menampilkan
+  label di `meta` lampiran (`... · dicek AI: dokumen`).
 
 ## Update App Android
 

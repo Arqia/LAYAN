@@ -201,7 +201,7 @@ private fun stepsFor(kind: String): List<Step> = when (kind) {
     )
     "laporan" -> listOf(Step("submitted", "Diteruskan ke teknisi", "Laporan dobel digabung otomatis"), Step("processing", "Dikerjakan", "Teknisi sedang menangani"), Step("done", null, "Kamu dikabari lewat chat"))
     else -> listOf(
-        Step("submitted", null, "Lewat chat LAYAN"), Step("needs_info", null, "Data kegiatan dan bukti kegiatan"), Step("processing", null, "Syarat dicek, draft surat dibuat"),
+        Step("submitted", null, "Lewat chat LAYAN"), Step("needs_info", null, "Data dan lampiran surat"), Step("processing", null, "Syarat dicek, draft surat dibuat"),
         Step("pending_approval", null, "Di staf Layanan Akademik"), Step("approved", null, "Nomor surat terbit"), Step("done", null, "PDF siap diunduh"),
     )
 }

@@ -149,7 +149,7 @@ export function HistoryList() {
 
 const STEPS: { status: Status; note: string }[] = [
   { status: "submitted", note: "Lewat chat LAYAN" },
-  { status: "needs_info", note: "Data kegiatan dan bukti kegiatan" },
+  { status: "needs_info", note: "Data dan lampiran surat" },
   { status: "processing", note: "Syarat dicek, draft surat dibuat" },
   { status: "pending_approval", note: "Di staf Layanan Akademik. Biasanya selesai di hari yang sama." },
   { status: "approved", note: "Nomor surat terbit" },

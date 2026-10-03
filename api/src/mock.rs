@@ -11,6 +11,24 @@ fn has(text: &str, words: &[&str]) -> bool {
     words.iter().any(|w| text.contains(w))
 }
 
+/// Jenis surat dari kata kunci (key di tools::LETTERS). "aktif kuliah untuk beasiswa" tetap surat aktif.
+fn letter_type(said: &str) -> &'static str {
+    if has(said, &["aktif kuliah", "keterangan aktif", "surat aktif"]) {
+        "aktif"
+    } else if has(said, &["magang", "kerja praktik", "kerja praktek", " kp ", "pengantar"]) {
+        "magang"
+    } else if has(said, &["penelitian", "survei", "survey", "riset"]) {
+        "penelitian"
+    } else if has(said, &["rekomendasi", "beasiswa"]) {
+        "beasiswa"
+    } else {
+        "dispensasi"
+    }
+}
+
+const LETTER_WORDS: [&str; 13] =
+    ["surat", "izin", "dispensasi", "lomba", "aktif kuliah", "magang", "kerja praktik", "pengantar", "penelitian", "survei", "riset", "rekomendasi", "beasiswa"];
+
 /// "10–12 Oktober" / "14 Okt" dari teks bebas. Kosong kalau tidak ketemu.
 fn dates(text: &str) -> String {
     const BULAN: [&str; 12] = ["januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"];
@@ -155,7 +173,7 @@ pub fn next(tr: &[Value]) -> Value {
                 .unwrap_or("Pertanyaan akademik");
             call("createTicket", json!({ "category": "Beban studi / SKS", "unit": "Bagian Akademik Fakultas", "question": question }))
         }
-        None if has(&said, &["surat", "izin", "dispensasi", "lomba"]) => call("getStudentProfile", json!({})),
+        None if has(&said, &LETTER_WORDS) => call("getStudentProfile", json!({})),
         None if has(&said, &["sks", " ip ", "ipk", "cuti", "nilai", "aturan", "krs", "ukt", "masa studi", "konversi"]) => {
             call("searchKnowledgeBase", json!({ "query": said }))
         }
@@ -183,19 +201,26 @@ pub fn next(tr: &[Value]) -> Value {
             )
         }
         None => assistant_text(
-            "Aku bisa bantu surat dispensasi, aturan akademik, booking ruang, atau lapor kerusakan. Coba ceritakan lebih spesifik ya.",
+            "Aku bisa bantu surat akademik (dispensasi, aktif kuliah, magang, penelitian, rekomendasi beasiswa), aturan akademik, booking ruang, atau lapor kerusakan. Coba ceritakan lebih spesifik ya.",
         ),
 
-        Some("getStudentProfile") => call(
-            "requestLetterDetails",
-            json!({
-                "message": "Siap. Aku buatkan Surat Dispensasi ya. Data profil kamu sudah aku ambil. Tinggal dua hal:",
-                "dates": dates(tr[u]["content"].as_str().unwrap_or("")),
-            }),
-        ),
-        Some("requestLetterDetails") => {
-            call("requestAttachment", json!({ "message": "Terakhir, upload bukti kegiatan (surat undangan atau pengumuman lolos)." }))
+        Some("getStudentProfile") => {
+            let key = letter_type(&format!(" {said} "));
+            let title = crate::tools::LETTERS.iter().find(|l| l.key == key).map_or("surat", |l| l.title);
+            call(
+                "requestLetterDetails",
+                json!({
+                    "type": key,
+                    "message": format!("Siap. Aku buatkan {title} ya. Data profil kamu sudah aku ambil. Tinggal lengkapi datanya:"),
+                    "dates": if key == "dispensasi" { dates(tr[u]["content"].as_str().unwrap_or("")) } else { String::new() },
+                }),
+            )
         }
+        // lampiran hanya untuk jenis surat yang memintanya (hasil requestLetterDetails menyebut langkah berikutnya)
+        Some("requestLetterDetails") if result("requestLetterDetails")["langkah_berikutnya"].as_str().is_some_and(|s| s.contains("requestAttachment")) => {
+            call("requestAttachment", json!({}))
+        }
+        Some("requestLetterDetails") => call("checkLetterRequirements", json!({})),
         Some("requestAttachment") => call("checkLetterRequirements", json!({})),
         Some("checkLetterRequirements") if result("checkLetterRequirements")["lolos"] == true => call("generateLetterDraft", json!({})),
         Some("generateLetterDraft") => {
@@ -204,11 +229,18 @@ pub fn next(tr: &[Value]) -> Value {
             let first = p["nama"].as_str().unwrap_or("Mahasiswa").split(' ').next().unwrap_or("Mahasiswa").to_owned();
             let list: Vec<String> = d["courses"].as_array().into_iter().flatten().filter_map(|c| c.as_str().map(str::to_owned)).collect();
             let when = d["dates"].as_str().filter(|s| !s.is_empty()).map(|s| format!(" pada {s}")).unwrap_or_default();
-            let summary = format!(
-                "{first} minta Surat Dispensasi untuk mengikuti {}{when}. Mata kuliah terlewat: {}. Syarat terpenuhi dan bukti kegiatan sudah diterima.",
-                d["activity"].as_str().unwrap_or("kegiatan"),
-                crate::tools::join_id(&list),
-            );
+            let jenis = d["jenis"].as_str().unwrap_or("Surat Dispensasi");
+            let summary = if jenis == "Surat Dispensasi" {
+                format!(
+                    "{first} minta Surat Dispensasi untuk mengikuti {}{when}. Mata kuliah terlewat: {}. Syarat terpenuhi dan bukti kegiatan sudah diterima.",
+                    d["activity"].as_str().unwrap_or("kegiatan"),
+                    crate::tools::join_id(&list),
+                )
+            } else {
+                let skip = ["jenis", "dates", "langkah_berikutnya"];
+                let isi: Vec<&str> = d.as_object().into_iter().flatten().filter(|(k, _)| !skip.contains(&k.as_str())).filter_map(|(_, v)| v.as_str()).collect();
+                format!("{first} minta {jenis}: {}. Semua syarat terpenuhi.", isi.join(", "))
+            };
             call("submitForApproval", json!({ "summary": summary }))
         }
 

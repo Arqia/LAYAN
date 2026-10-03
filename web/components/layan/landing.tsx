@@ -1,10 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { HOME } from "@/lib/data"
-import { Mark } from "@/components/layan/primitives"
 import { useStore } from "@/components/layan/store"
+import { Logo, SiteFooter, setLang, useLang, type Lang } from "@/components/layan/site"
+import Link from "next/link"
+import { StudentFlows } from "@/components/layan/student-flows"
 
 // Landing page publik.
 // Isi dibatasi ke 4 layanan yang benar-benar dilayani agent (lihat SYSTEM_PROMPT di api/src/tools.rs).
@@ -16,7 +18,6 @@ const ICONS: Record<string, string> = {
   akademik: "M2 9l10-5 10 5-10 5-10-5z M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5",
   ruang: "M4 21V6l8-3 8 3v15 M9 21v-5h6v5 M8 9h2 M14 9h2 M8 12.5h2 M14 12.5h2",
   kerusakan: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z",
-  status: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3.5 2",
 }
 
 const ID = {
@@ -25,26 +26,21 @@ const ID = {
   signin: "Masuk", open: "Buka LAYAN", student: "Mahasiswa",
   h1a: "Urus layanan kampus.",
   phrases: ["Lewat satu chat.", "Tanpa antre.", "Sampai selesai."],
-  heroSub: "Ajukan surat dispensasi, tanya aturan akademik, booking ruang, atau lapor kerusakan. Keputusan akhir tetap di staf kampus.",
+  heroSub: "Ajukan surat akademik, tanya aturan akademik, booking ruang, atau lapor kerusakan. Keputusan akhir tetap di staf kampus.",
   cta1: "Mulai dengan LAYAN", cta2: "Lihat cara kerja",
   chatStatus: "Asisten layanan kampus · aktif",
-  greet1: "Halo.", greet2: "Mau urus apa hari ini?",
-  caption: "LAYAN memahami kebutuhanmu.",
-  askAria: "Tulis pertanyaan untuk LAYAN (perlu masuk)",
-  prompts: ["Aku ikut lomba tanggal 14, butuh surat dispensasi.", "Berapa batas maksimal cuti akademik?", "Pinjam ruang rapat Jumat jam 13.00 untuk 10 orang.", "Proyektor di ruang F2.3 mati."],
-  quick: [["dispensasi", "Ajukan dispensasi", "Izin lomba atau kegiatan"], ["status", "Cek status", "Pantau pengajuanmu"], ["ruang", "Booking ruang", "Cari ruang yang kosong"]],
 
   svcA: "Empat layanan.", svcB: "Satu tempat.",
   svcSub: "Pilih layanan untuk melihat LAYAN menanganinya.",
   services: [
-    { k: "dispensasi", name: "Surat Dispensasi", desc: "Izin lomba atau kegiatan", q: "Aku ikut lomba tanggal 14, butuh surat dispensasi.", a: "Siap. Data profilmu sudah terisi. Tinggal unggah surat undangan lombanya, lalu aku cek syaratnya." },
+    { k: "dispensasi", name: "Surat Akademik", desc: "Dispensasi, aktif kuliah, magang, dll.", q: "Aku ikut lomba tanggal 14, butuh surat dispensasi.", a: "Siap. Data profilmu sudah terisi. Tinggal unggah surat undangan lombanya, lalu aku cek syaratnya." },
     { k: "akademik", name: "Aturan Akademik", desc: "Jawaban dengan kutipan", q: "Berapa batas maksimal cuti akademik?", a: "Jawabanku diambil dari pedoman akademik kampus, lengkap dengan bagian yang dikutip. Kalau belum pasti, aku teruskan ke unit akademik." },
     { k: "ruang", name: "Booking Ruang", desc: "Cari & tahan ruang kosong", q: "Pinjam ruang rapat Jumat jam 13.00 untuk 10 orang.", a: "Ada 2 ruang yang kosong di jam itu. Pilih satu, nanti aku tahan untukmu." },
     { k: "kerusakan", name: "Lapor Kerusakan", desc: "Langsung ke teknisi", q: "Proyektor di ruang F2.3 mati.", a: "Laporanmu tercatat dengan urgensi Sedang dan sudah diteruskan ke teknisi. Pantau tindak lanjutnya di sini." },
   ],
   sampleTag: "Contoh",
   checksTitle: "Cek syarat", checks: [["Status mahasiswa aktif", "ok"], ["Tanggal lomba tercatat", "ok"], ["Surat undangan", "Menunggu unggahan"]], dispAction: "Ajukan dispensasi",
-  citeTitle: "Sumber jawaban", citeDoc: "Pedoman Akademik", citeNote: "Bagian yang dikutip ditampilkan bersama jawaban.", citeAsk: "Tanyakan", citeTicket: "Masih bingung? Buat tiket",
+  citeTitle: "Sumber jawaban", citeDoc: "Pedoman Akademik", citeNote: "Bagian yang dikutip ditampilkan bersama jawaban.", citeAsk: "Tanyakan", citeTicket: "Masih bingung? Buat tiket", citeMore: "Lihat isi sumbernya",
   rooms: [["G2.4", "Ruang rapat", "20 orang"], ["F2.3", "Ruang kelas", "40 orang"]], roomHold: "Tahan",
   reportTitle: "Proyektor mati", reportRoom: "Ruang F2.3", reportUrgency: "Urgensi sedang", reportStatus: "Diteruskan ke teknisi", reportAction: "Lapor kerusakan",
 
@@ -69,7 +65,7 @@ const ID = {
   finalTitle: "Urusan kampus, beres dari chat.",
   finalSub: "Jelajahi tanpa akun. Masuk dengan akun kampus saat kamu siap mengajukan sesuatu.",
   appAndroid: "Unduh app Android",
-  foot: "Asisten layanan kampus",
+  installHow: "Cara pasang di HP", moreLinks: [["Keamanan & sumber jawaban", "/keamanan"], ["Untuk staf & teknisi", "/untuk-staf"], ["FAQ", "/faq"]],
 
   mTitle: "Masuk untuk melanjutkan",
   mDesc: "Halaman ini bebas dijelajahi. Untuk menjalankan aksi ini, masuk dulu dengan akun kampus.",
@@ -77,7 +73,7 @@ const ID = {
   mPrimary: "Masuk dan lanjutkan", mCancel: "Nanti saja", mClose: "Tutup",
   intents: {
     start: "Percakapan baru", ask: "Mengirim pertanyaan", status: "Cek status pengajuan", app: "Beranda LAYAN",
-    dispensasi: "Ajukan surat dispensasi", akademik: "Tanya aturan akademik", ruang: "Booking ruang", kerusakan: "Lapor kerusakan", tiket: "Buat tiket ke unit akademik",
+    dispensasi: "Ajukan surat akademik", akademik: "Tanya aturan akademik", ruang: "Booking ruang", kerusakan: "Lapor kerusakan", tiket: "Buat tiket ke unit akademik",
   } as Record<string, string>,
 }
 
@@ -89,26 +85,21 @@ const EN: Dict = {
   signin: "Sign in", open: "Open LAYAN", student: "Student",
   h1a: "Handle campus services.",
   phrases: ["In one chat.", "No queues.", "Start to finish."],
-  heroSub: "Request a dispensation letter, ask about academic rules, book a room, or report damage. Campus staff still make the final call.",
+  heroSub: "Request academic letters, ask about academic rules, book a room, or report damage. Campus staff still make the final call.",
   cta1: "Start with LAYAN", cta2: "See how it works",
   chatStatus: "Campus service assistant · online",
-  greet1: "Hi there.", greet2: "What do you need today?",
-  caption: "LAYAN understands what you need.",
-  askAria: "Ask LAYAN a question (sign-in required)",
-  prompts: ["I have a competition on the 14th and need a dispensation letter.", "What is the maximum length of academic leave?", "Book the meeting room Friday at 1 PM for 10 people.", "The projector in room F2.3 is broken."],
-  quick: [["dispensasi", "Request dispensation", "For competitions or events"], ["status", "Check status", "Track your requests"], ["ruang", "Book a room", "Find a free room"]],
 
   svcA: "Four services.", svcB: "One place.",
   svcSub: "Pick a service to see how LAYAN handles it.",
   services: [
-    { k: "dispensasi", name: "Dispensation Letter", desc: "For competitions or events", q: "I have a competition on the 14th and need a dispensation letter.", a: "Sure. Your profile is filled in. Upload the competition invitation and I will check the requirements." },
+    { k: "dispensasi", name: "Academic Letters", desc: "Dispensation, enrollment, internship, more", q: "I have a competition on the 14th and need a dispensation letter.", a: "Sure. Your profile is filled in. Upload the competition invitation and I will check the requirements." },
     { k: "akademik", name: "Academic Rules", desc: "Answers with citations", q: "What is the maximum length of academic leave?", a: "My answer comes from the campus academic handbook, with the quoted section. If it is unclear, I forward it to the academic office." },
     { k: "ruang", name: "Room Booking", desc: "Find & hold a free room", q: "Book the meeting room Friday at 1 PM for 10 people.", a: "There are 2 free rooms at that time. Pick one and I will hold it for you." },
     { k: "kerusakan", name: "Damage Report", desc: "Straight to a technician", q: "The projector in room F2.3 is broken.", a: "Your report is logged with medium urgency and sent to a technician. Track the follow-up here." },
   ],
   sampleTag: "Sample",
   checksTitle: "Requirement check", checks: [["Active student status", "ok"], ["Competition date recorded", "ok"], ["Invitation letter", "Waiting for upload"]], dispAction: "Request dispensation",
-  citeTitle: "Answer source", citeDoc: "Academic Handbook", citeNote: "The quoted section is shown with the answer.", citeAsk: "Ask", citeTicket: "Still unsure? Open a ticket",
+  citeTitle: "Answer source", citeDoc: "Academic Handbook", citeNote: "The quoted section is shown with the answer.", citeAsk: "Ask", citeTicket: "Still unsure? Open a ticket", citeMore: "See the sources",
   rooms: [["G2.4", "Meeting room", "20 people"], ["F2.3", "Classroom", "40 people"]], roomHold: "Hold",
   reportTitle: "Projector broken", reportRoom: "Room F2.3", reportUrgency: "Medium urgency", reportStatus: "Sent to technician", reportAction: "Report damage",
 
@@ -133,7 +124,7 @@ const EN: Dict = {
   finalTitle: "Campus errands, handled in a chat.",
   finalSub: "Explore without an account. Sign in with your campus account when you are ready to submit something.",
   appAndroid: "Download Android app",
-  foot: "Campus service assistant",
+  installHow: "How to install", moreLinks: [["Trust & answer sources", "/keamanan"], ["For staff & technicians", "/untuk-staf"], ["FAQ", "/faq"]],
 
   mTitle: "Sign in to continue",
   mDesc: "This page is free to explore. To run this action, sign in with your campus account first.",
@@ -141,12 +132,11 @@ const EN: Dict = {
   mPrimary: "Sign in and continue", mCancel: "Not now", mClose: "Close",
   intents: {
     start: "New conversation", ask: "Sending a question", status: "Check request status", app: "LAYAN home",
-    dispensasi: "Request a dispensation letter", akademik: "Ask about academic rules", ruang: "Book a room", kerusakan: "Report damage", tiket: "Open a ticket to the academic office",
+    dispensasi: "Request an academic letter", akademik: "Ask about academic rules", ruang: "Book a room", kerusakan: "Report damage", tiket: "Open a ticket to the academic office",
   },
 }
 
-const DICT = { id: ID, en: EN }
-type Lang = keyof typeof DICT
+const DICT: Record<Lang, Dict> = { id: ID, en: EN }
 
 /** Aksi nyata yang butuh login. `q` diisikan ke kolom chat setelah login (app/app/page.tsx). */
 type Intent = { key: string; path: string; q?: string }
@@ -155,7 +145,6 @@ type Gate = (i: Intent) => () => void
 const SECTIONS = ["top", "layanan", "cara-kerja", "mulai"]
 const EASE = "cubic-bezier(.2,.7,.2,1)"
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v))
-const ease = (t: number) => 1 - Math.pow(1 - t, 3)
 
 // animasi: pilihan pengguna lewat saklar di navbar menang; tanpa pilihan, ikut setelan "kurangi animasi" perangkat
 type Motion = "on" | "off"
@@ -181,24 +170,6 @@ const readMotion = (): Motion => {
 }
 const motionOff = () => readMotion() === "off"
 
-// bahasa disimpan di localStorage; event lokal supaya useSyncExternalStore ikut berubah
-const LANG_EVENT = "layan-lang"
-const subscribeLang = (cb: () => void) => {
-  window.addEventListener("storage", cb)
-  window.addEventListener(LANG_EVENT, cb)
-  return () => {
-    window.removeEventListener("storage", cb)
-    window.removeEventListener(LANG_EVENT, cb)
-  }
-}
-const readLang = (): Lang => {
-  try {
-    return localStorage.getItem("layan_lang") === "en" ? "en" : "id"
-  } catch {
-    return "id"
-  }
-}
-
 const SUB = "text-[length:clamp(16px,1.25vw,19px)] leading-[1.55] text-soft-foreground text-pretty"
 const GUTTER = "px-[clamp(20px,4vw,48px)]"
 const CARD = "overflow-hidden rounded-[28px] border bg-card shadow-[0_50px_120px_-60px_rgba(22,24,26,.35)]"
@@ -209,6 +180,7 @@ const MSG_IN = "animate-[layanMsgIn_.6s_cubic-bezier(.2,.7,.2,1)_both]"
 const BTN_DARK = "inline-flex cursor-pointer items-center whitespace-nowrap rounded-full bg-ink font-semibold text-ink-foreground transition-all duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:-translate-y-0.5 active:scale-[.98]"
 const BTN_LINE = "inline-flex cursor-pointer items-center whitespace-nowrap rounded-full border border-input font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground hover:bg-card active:scale-[.98]"
 const BTN_ACC = "inline-flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground transition-all duration-250 hover:-translate-y-px hover:bg-primary-hover active:scale-[.98]"
+const TAG = "rounded-full border px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
 
 function Icon({ d, size = 20, sw = 1.6 }: { d: string; size?: number; sw?: number }) {
   return (
@@ -222,26 +194,14 @@ const Up = ({ size = 18 }: { size?: number }) => <Icon d="M12 19V5M6 11l6-6 6 6"
 const Check = ({ size = 14 }: { size?: number }) => <Icon d="M5 12.5l4.5 4.5L19 7.5" size={size} sw={2.2} />
 const Download = () => <Icon d="M12 4v11M7 10l5 5 5-5M5 20h14" size={18} sw={1.8} />
 
-function DoodleArrow({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 120 100" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 86 C36 68 58 60 90 46" />
-      <path d="M74 40 L92 44 L82 60" />
-    </svg>
-  )
-}
+// track 36px, knob 16px, jarak 2px: mati = kiri 2px, nyala = kiri 18px
+const SwitchTrack = ({ on }: { on: boolean }) => (
+  <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${on ? "bg-primary" : "bg-input"}`}>
+    <span className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-[cubic-bezier(.3,1.4,.5,1)] ${on ? "translate-x-4" : "translate-x-0"}`} />
+  </span>
+)
 
-function Sparkles({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 120 90" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" className={className}>
-      <path d="M28 8 v24 M16 20 h24" />
-      <path d="M84 46 v18 M75 55 h18" />
-      <circle cx="102" cy="18" r="6" />
-      <circle cx="52" cy="68" r="4" fill="currentColor" stroke="none" />
-    </svg>
-  )
-}
-
+const Pulse = () => <span className="size-1.5 shrink-0 rounded-full bg-primary animate-[layanPulse_2.4s_infinite]" />
 const Dots = () => (
   <span className="flex gap-[5px]">
     {[0, 0.15, 0.3].map((d) => (
@@ -250,20 +210,35 @@ const Dots = () => (
   </span>
 )
 
-/** Tombol yang sedikit tertarik ke kursor. Transform di wrapper supaya hover tombol tetap jalan. */
-function Magnetic({ children, strength = 0.28 }: { children: ReactNode; strength?: number }) {
-  const ref = useRef<HTMLSpanElement>(null)
-  const move = (e: PointerEvent) => {
-    const el = ref.current
-    if (!el || e.pointerType !== "mouse" || motionOff()) return
-    const r = el.getBoundingClientRect()
-    el.style.transform = `translate3d(${(e.clientX - r.left - r.width / 2) * strength}px, ${(e.clientY - r.top - r.height / 2) * strength * 1.2}px, 0)`
-  }
-  const leave = () => ref.current && (ref.current.style.transform = "")
+function ChatHead({ size, status, right }: { size: number; status: string; right?: ReactNode }) {
   return (
-    <span ref={ref} onPointerMove={move} onPointerLeave={leave} className="inline-flex transition-transform duration-500 ease-[cubic-bezier(.2,.7,.2,1)]">
+    <div className="flex items-center justify-between gap-3 border-b px-[18px] py-3.5">
+      <div className="flex items-center gap-2.5">
+        <Logo size={size} />
+        <div>
+          <div className="text-[14.5px] font-semibold">LAYAN</div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Pulse />
+            {status}
+          </div>
+        </div>
+      </div>
+      {right}
+    </div>
+  )
+}
+
+/** CTA utama: tombol diam di tempat; saat hover panah di dalam lingkaran berganti (keluar kanan, masuk dari kiri). */
+function GoButton({ onClick, children, className = "" }: { onClick: () => void; children: ReactNode; className?: string }) {
+  const slide = "transition-transform duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"
+  return (
+    <button type="button" onClick={onClick} className={`group inline-flex h-[54px] cursor-pointer items-center gap-3.5 whitespace-nowrap rounded-full bg-ink pl-[26px] pr-[7px] text-base font-semibold text-ink-foreground transition-transform duration-200 active:scale-[.98] ${className}`}>
       {children}
-    </span>
+      <span aria-hidden className="relative flex size-10 items-center justify-center overflow-hidden rounded-full bg-ink-foreground/10 transition-colors duration-500 group-hover:bg-primary group-hover:text-primary-foreground">
+        <span className={`${slide} group-hover:translate-x-[160%]`}><Arrow /></span>
+        <span className={`absolute -translate-x-[160%] ${slide} group-hover:translate-x-0`}><Arrow /></span>
+      </span>
+    </button>
   )
 }
 
@@ -275,18 +250,19 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
   const box = useRef<HTMLDivElement>(null)
 
   // berganti sendiri selama terlihat, sampai pengguna memilih tab
+  const count = t.services.length
   useEffect(() => {
     const el = box.current
     if (!auto || !el || motion === "off") return
     let visible = false
     const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting), { threshold: 0.4 })
     io.observe(el)
-    const id = setInterval(() => visible && setActive((a) => (a + 1) % 4), 5600)
+    const id = setInterval(() => visible && setActive((a) => (a + 1) % count), 5600)
     return () => {
       clearInterval(id)
       io.disconnect()
     }
-  }, [auto, motion])
+  }, [auto, motion, count])
 
   const pick = (i: number) => {
     setAuto(false)
@@ -329,6 +305,7 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
       </div>
 
       <div data-reveal data-delay="160" className={CARD}>
+        <ChatHead size={30} status={t.chatStatus} right={<span className={TAG}>{t.sampleTag}</span>} />
         {/* key: ganti layanan = percakapan diputar ulang dari awal */}
         <div key={s.k + t.sampleTag} role="tabpanel" aria-live="polite" className="flex min-h-[380px] flex-col justify-end gap-3.5 p-[clamp(16px,2.4vw,24px)]">
           <div className={`${USER_BUBBLE} ${MSG_IN}`}>{s.q}</div>
@@ -353,7 +330,7 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
               <div className="flex flex-col gap-3 rounded-[18px] border p-4">
                 <span className="text-xs font-medium text-muted-foreground">{t.citeTitle}</span>
                 <span className="flex items-center gap-2.5 border-l-2 border-primary pl-3 text-[15px] font-semibold">{t.citeDoc}</span>
-                <span className="text-[13px] text-muted-foreground">{t.citeNote}</span>
+                <span className="text-[13px] text-muted-foreground">{t.citeNote} <Link href="/keamanan" className="font-medium text-primary underline-offset-4 hover:underline">{t.citeMore}</Link></span>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={ask} className={BTN_ACC}>{t.citeAsk}<Arrow size={15} /></button>
                   <button type="button" onClick={gate({ key: "tiket", path: "/app", q: s.q })} className="h-10 cursor-pointer rounded-full border border-input px-4 text-sm font-medium transition-colors hover:border-foreground">{t.citeTicket}</button>
@@ -396,7 +373,7 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
   )
 }
 
-/* ---------- 03 Cara kerja: percakapan yang berjalan sendiri; hover/ketuk tahap = lompat ke tahap itu ---------- */
+/* ---------- 03 Cara kerja: percakapan yang berjalan sendiri dan berulang; hanya untuk ditonton, tidak bisa diklik ---------- */
 
 // 6 tahap x 3 sub-langkah; React hanya render ulang saat sub-langkah berganti,
 // ketikan, teks yang mengalir, dan garis progres diisi langsung ke DOM tiap frame.
@@ -404,16 +381,14 @@ const STAGES = 6, SUBS = 3
 const DUR = [2600, 1500, 2400, 2800, 2400, 2800] // lama tiap tahap (ms)
 const END = STAGES - 0.001
 
-function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
+function Story({ t, motion }: { t: Dict; motion: Motion }) {
   const box = useRef<HTMLElement>(null)
   const typed = useRef<HTMLSpanElement>(null)
   const streamed = useRef<HTMLSpanElement>(null)
   const line = useRef<HTMLSpanElement>(null)
   const segs = useRef<(HTMLSpanElement | null)[]>([])
   const pos = useRef(motion === "off" ? END : 0) // posisi 0..6 (tahap + progres di dalamnya)
-  const hold = useRef<number | null>(null) // tahap yang sedang di-hover/diketuk
   const rest = useRef(0) // jeda di akhir sebelum mengulang
-  const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [k, setK] = useState(motion === "off" ? STAGES * SUBS - 1 : 0)
   const stage = Math.floor(k / SUBS), sub = k % SUBS
 
@@ -434,7 +409,7 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
 
   useEffect(() => {
     if (motion === "off") {
-      if (hold.current === null) pos.current = END
+      pos.current = END
       paint(pos.current)
       return
     }
@@ -447,13 +422,11 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
       const dt = Math.min(64, now - last)
       last = now
       if (visible) {
-        const h = hold.current
         if (rest.current > 0) {
           rest.current -= dt
           if (rest.current <= 0) pos.current = 0
-        } else if (h === null || pos.current < h + 0.999) {
+        } else {
           pos.current += dt / DUR[Math.min(STAGES - 1, Math.floor(pos.current))]
-          if (h !== null) pos.current = Math.min(pos.current, h + 0.999) // berhenti di akhir tahap yang di-hover
           if (pos.current >= END) {
             pos.current = END
             rest.current = 2800
@@ -470,21 +443,6 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
     }
   }, [motion, paint])
 
-  const focusStage = (i: number) => {
-    hold.current = i
-    rest.current = 0
-    pos.current = motion === "off" ? i + 0.999 : i
-    paint(pos.current)
-  }
-  const release = () => (hold.current = null)
-  // ketuk (HP): tahan di tahap itu sebentar, lalu lanjut jalan sendiri
-  const tap = (i: number) => {
-    focusStage(i)
-    clearTimeout(tapTimer.current)
-    tapTimer.current = setTimeout(release, 6000)
-  }
-  useEffect(() => () => clearTimeout(tapTimer.current), [])
-
   const tracked = stage === 5 ? sub + 1 : 0 // jumlah tahap status yang sudah centang
 
   return (
@@ -497,40 +455,40 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
           </h2>
           <p data-reveal data-delay="120" className={`mt-4 max-w-[440px] ${SUB}`}>{t.storySub}</p>
 
-          {/* alur di layar lebar: satu garis yang terisi; hover/fokus = lompat ke tahap itu */}
-          <ol className="relative mt-[clamp(20px,4vh,40px)] hidden list-none flex-col p-0 lg:flex" onMouseLeave={release}>
+          {/* alur di layar lebar: satu garis yang terisi mengikuti tahap */}
+          <ol className="relative mt-[clamp(20px,4vh,40px)] hidden list-none flex-col p-0 lg:flex">
             <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-0.5 bg-border" />
             <span ref={line} aria-hidden className="absolute bottom-3 left-[11px] top-3 w-0.5 origin-top bg-primary" style={{ transform: "scaleY(0)" }} />
             {t.steps.map(([label, desc], i) => {
               const done = i < stage, on = i === stage
               return (
                 <li key={label} aria-current={on ? "step" : undefined} className="relative">
-                  <button type="button" onMouseEnter={() => focusStage(i)} onFocus={() => focusStage(i)} onBlur={release} onClick={() => focusStage(i)} className="group flex w-full cursor-pointer gap-4 py-[clamp(4px,1vh,9px)] text-left transition-transform duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:translate-x-1">
+                  <div className="flex w-full gap-4 py-[clamp(4px,1vh,9px)]">
                     <span className={`relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-500 ${done ? "border-primary bg-primary text-primary-foreground" : on ? "scale-110 border-primary bg-background" : "border-border bg-background"}`}>
                       {done && <Check size={12} />}
                       {on && <span className="size-2 rounded-full bg-primary animate-[layanPulse_2.4s_infinite]" />}
                     </span>
                     <span className="flex flex-col">
-                      <span className={`text-[17px] font-semibold transition-colors duration-500 group-hover:text-foreground ${on ? "text-foreground" : done ? "text-soft-foreground" : "text-subtle-foreground"}`}>{label}</span>
+                      <span className={`text-[17px] font-semibold transition-colors duration-500 ${on ? "text-foreground" : done ? "text-soft-foreground" : "text-subtle-foreground"}`}>{label}</span>
                       <span className="grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(.2,.7,.2,1)]" style={{ gridTemplateRows: on ? "1fr" : "0fr", opacity: on ? 1 : 0 }}>
                         <span className="overflow-hidden text-[14.5px] leading-normal text-muted-foreground">{desc}</span>
                       </span>
                     </span>
-                  </button>
+                  </div>
                 </li>
               )
             })}
           </ol>
 
-          {/* alur di HP: 6 segmen yang bisa diketuk + tahap aktif */}
+          {/* alur di HP: 6 segmen progres + tahap aktif */}
           <div className="mt-4 flex flex-col gap-2.5 lg:hidden">
             <div className="grid grid-cols-6 gap-1.5">
               {t.steps.map(([label], i) => (
-                <button key={label} type="button" onClick={() => tap(i)} aria-label={label} aria-current={i === stage ? "step" : undefined} className="flex h-6 cursor-pointer items-center">
+                <span key={label} aria-hidden className="flex h-6 items-center">
                   <span className="relative h-1 w-full overflow-hidden rounded-full bg-border">
                     <span ref={(n) => { segs.current[i] = n }} className="absolute inset-0 origin-left bg-primary" style={{ transform: "scaleX(0)" }} />
                   </span>
-                </button>
+                </span>
               ))}
             </div>
             <span key={stage} className={`flex items-baseline gap-2 ${MSG_IN}`}>
@@ -540,12 +498,9 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
           </div>
         </div>
 
-        <div className={`flex h-[min(560px,70dvh)] flex-col lg:h-[min(620px,calc(100dvh-200px))] ${CARD}`}>
+        <div className={`pointer-events-none flex h-[min(560px,70dvh)] select-none flex-col lg:h-[min(620px,calc(100dvh-200px))] ${CARD}`}>
+          <ChatHead size={30} status={t.chatStatus} right={stage >= 1 && sub + stage > 1 ? <span className={`rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground ${MSG_IN}`}>{t.sDetected}</span> : undefined} />
           <div aria-live="polite" className="flex min-h-0 flex-1 flex-col justify-end gap-3.5 overflow-hidden p-[clamp(16px,2.4vw,24px)] [mask-image:linear-gradient(to_bottom,transparent,#000_40px)]">
-            <div className="flex flex-col gap-1 text-[length:clamp(22px,2.3vw,32px)] font-semibold leading-[1.15] tracking-[-.03em]">
-              <div className="text-subtle-foreground">{t.greet1}</div>
-              <div>{t.greet2}</div>
-            </div>
             {stage >= 1 && <div className={`${USER_BUBBLE} ${MSG_IN}`}>{t.sPrompt}</div>}
 
             {stage === 1 && (
@@ -611,13 +566,13 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
             )}
           </div>
           <div className="border-t p-3.5">
-            <button type="button" onClick={gate({ key: "dispensasi", path: "/app", q: t.sPrompt })} aria-label={t.askAria} className="flex min-h-14 w-full cursor-text items-center gap-3 rounded-2xl border bg-panel py-2 pl-[18px] pr-2 text-left transition-[border-color,box-shadow] duration-250 hover:border-primary hover:shadow-[0_0_0_4px_rgba(10,122,102,.08)]">
+            <div aria-hidden className="flex min-h-14 w-full items-center gap-3 rounded-2xl border bg-panel py-2 pl-[18px] pr-2">
               <span className="min-w-0 flex-1 truncate text-[15px]">
                 <span ref={typed} />
                 {stage === 0 ? <span aria-hidden className="ml-0.5 inline-block h-[18px] w-0.5 bg-primary align-[-3px] animate-[layanBlink_1s_steps(1)_infinite]" /> : <span className="text-muted-foreground">{t.inputPh}</span>}
               </span>
               <span aria-hidden className={`flex size-10 items-center justify-center rounded-xl transition-colors duration-300 ${stage === 0 && sub === 2 ? "bg-primary text-primary-foreground" : "bg-ink text-ink-foreground"}`}><Up size={16} /></span>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -630,23 +585,15 @@ function Story({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion }) {
 export function Landing() {
   const { me } = useStore()
   const router = useRouter()
-  const lang = useSyncExternalStore(subscribeLang, readLang, () => "id" as Lang)
+  const lang = useLang()
   const motion = useSyncExternalStore(subscribeMotion, readMotion, () => "on" as Motion)
-  const cine = motion === "on" // hero sinematik (hanya layar >= 900px)
-  const C = (cls: string) => (cine ? cls : "")
   const [scrolled, setScrolled] = useState(false)
   const [rail, setRail] = useState(0)
   const [menu, setMenu] = useState(false)
   const [intent, setIntent] = useState<Intent | null>(null)
 
   const root = useRef<HTMLDivElement>(null)
-  const heroWrap = useRef<HTMLElement>(null)
-  const heroHead = useRef<HTMLDivElement>(null)
-  const heroChat = useRef<HTMLDivElement>(null)
-  const heroCaption = useRef<HTMLDivElement>(null)
-  const heroType = useRef<HTMLSpanElement>(null)
   const heroH1b = useRef<HTMLSpanElement>(null)
-  const promptIdx = useRef(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const modalPrimary = useRef<HTMLButtonElement>(null)
   const lastFocus = useRef<Element | null>(null)
@@ -658,44 +605,27 @@ export function Landing() {
     document.documentElement.lang = lang
   }, [lang])
 
+  // saklar Animasi bisa mengubah tinggi isi (mis. teks yang diketik): kunci posisi section yang sedang dibaca
+  const anchor = useRef<{ el: HTMLElement; top: number } | null>(null)
   const toggleMotion = () => {
+    const el = document.getElementById(SECTIONS[rail])
+    anchor.current = el && { el, top: el.getBoundingClientRect().top }
     try {
       localStorage.setItem("layan_motion", motion === "on" ? "off" : "on")
     } catch {}
     window.dispatchEvent(new Event(MOTION_EVENT))
   }
+  useLayoutEffect(() => {
+    const a = anchor.current
+    anchor.current = null
+    if (a) window.scrollBy({ top: a.el.getBoundingClientRect().top - a.top, behavior: "instant" })
+  }, [motion])
 
-  const setLang = (l: Lang) => {
-    try {
-      localStorage.setItem("layan_lang", l)
-    } catch {}
-    window.dispatchEvent(new Event(LANG_EVENT))
-  }
-
-  // scroll: nav mengecil, hero sinematik (layar lebar & gerak tidak dikurangi), link navbar aktif
+  // scroll: nav mengecil, link navbar aktif
   useEffect(() => {
-    const wide = window.matchMedia("(min-width: 900px)")
     const tick = () => {
       const vh = window.innerHeight
       setScrolled(window.scrollY > 24)
-      const head = heroHead.current, chat = heroChat.current, cap = heroCaption.current, wrap = heroWrap.current
-      if (wide.matches && !motionOff() && wrap && head && chat) {
-        const p = clamp(-wrap.getBoundingClientRect().top / Math.max(1, wrap.offsetHeight - vh))
-        const e = ease(p)
-        head.style.transform = `translate3d(0, ${-vh * 0.28 * e}px, 0)`
-        head.style.opacity = String(clamp(1 - p * 1.9))
-        const finalTop = Math.max(150, (vh - chat.offsetHeight) / 2 + 48)
-        chat.style.transform = `translate3d(0, ${(finalTop - vh) * e}px, 0) scale(${0.9 + 0.1 * e})`
-        chat.style.opacity = String(clamp(e * 2.4))
-        if (cap) {
-          const o = clamp((p - 0.55) / 0.3)
-          cap.style.opacity = String(o)
-          cap.style.top = finalTop - 74 + "px"
-          cap.style.transform = `translate3d(0, ${(1 - o) * 18}px, 0)`
-        }
-      } else if (head && chat) {
-        head.style.transform = head.style.opacity = chat.style.transform = chat.style.opacity = ""
-      }
       let r = 0
       SECTIONS.forEach((id, i) => {
         const el = document.getElementById(id)
@@ -710,14 +640,12 @@ export function Landing() {
     tick()
     window.addEventListener("scroll", onScroll, { passive: true })
     window.addEventListener("resize", onScroll)
-    wide.addEventListener("change", onScroll)
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener("scroll", onScroll)
       window.removeEventListener("resize", onScroll)
-      wide.removeEventListener("change", onScroll)
     }
-  }, [motion])
+  }, [])
 
   // intro hero + reveal saat masuk layar: judul dibuka (clip), elemen lain naik; diulang saat masuk lagi
   useEffect(() => {
@@ -792,35 +720,6 @@ export function Landing() {
     return () => timers.forEach(clearTimeout)
   }, [t, motion])
 
-  // prompt contoh diketik di kotak chat hero; indeksnya dipakai saat kotak diklik
-  useEffect(() => {
-    const el = heroType.current
-    if (!el) return
-    promptIdx.current = 0
-    if (motionOff()) {
-      el.textContent = t.prompts[0]
-      return
-    }
-    let i = 0, ch = 0, dir = 1, timer: ReturnType<typeof setTimeout>
-    el.textContent = ""
-    const step = () => {
-      promptIdx.current = i % t.prompts.length
-      const txt = t.prompts[promptIdx.current]
-      if (dir === 1) {
-        el.textContent = txt.slice(0, ++ch)
-        if (ch >= txt.length) return (dir = -1), (timer = setTimeout(step, 2400))
-        timer = setTimeout(step, 34 + Math.random() * 46)
-      } else {
-        ch = Math.max(0, ch - 3)
-        el.textContent = txt.slice(0, ch)
-        if (ch === 0) return (dir = 1), i++, (timer = setTimeout(step, 420))
-        timer = setTimeout(step, 16)
-      }
-    }
-    timer = setTimeout(step, 1300)
-    return () => clearTimeout(timer)
-  }, [t, motion])
-
   // modal: kunci scroll, fokus ke tombol utama, Esc & trap Tab, fokus kembali saat ditutup
   useEffect(() => {
     if (!modal) return
@@ -862,7 +761,6 @@ export function Landing() {
     setMenu(false)
   }
   const link = (id: string) => (e: React.MouseEvent) => (e.preventDefault(), scrollToId(id))
-  const promptOf = (k: string) => t.services.find((s) => s.k === k)?.q
 
   const navLinks = ([["layanan", t.nav.layanan, 1], ["cara-kerja", t.nav.cara, 2], ["mulai", t.nav.app, 3]] as const).map(([id, label, idx]) => ({ id, label, on: rail === idx }))
   const nav = scrolled
@@ -879,7 +777,7 @@ export function Landing() {
           style={{ maxWidth: nav.maxW, height: nav.h, padding: `0 ${nav.inner}`, background: nav.bg, borderColor: nav.bd, backdropFilter: nav.blur, WebkitBackdropFilter: nav.blur, boxShadow: nav.sh }}
         >
           <a href="#top" onClick={link("top")} aria-label="LAYAN" className="flex items-center gap-2.5 text-[17px] font-extrabold tracking-[.04em] text-foreground">
-            <Mark size={26} />
+            <Logo size={26} />
             LAYAN
           </a>
           <div className="hidden items-center gap-0.5 min-[1080px]:flex">
@@ -892,9 +790,7 @@ export function Landing() {
           <div className="flex items-center gap-2.5">
             <button type="button" role="switch" aria-checked={motion === "on"} onClick={toggleMotion} className={`hidden h-11 pl-4 pr-1.5 min-[1080px]:flex cursor-pointer items-center gap-2.5 rounded-full border bg-card/60 text-[13.5px] font-medium transition-colors duration-300 hover:text-foreground ${motion === "on" ? "text-foreground" : "text-muted-foreground"}`}>
               {t.motionLabel}
-              <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${motion === "on" ? "bg-primary" : "bg-input"}`}>
-                <span className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-out ${motion === "on" ? "translate-x-4" : "translate-x-0"}`} />
-              </span>
+              <SwitchTrack on={motion === "on"} />
             </button>
             <div role="group" aria-label={t.langLabel} className="flex rounded-full border bg-card/60 p-1">
               {(["id", "en"] as const).map((l) => (
@@ -923,91 +819,41 @@ export function Landing() {
           ))}
           <button type="button" role="switch" aria-checked={motion === "on"} onClick={toggleMotion} className={`mt-1 flex h-12 justify-between px-3.5 cursor-pointer items-center gap-2.5 rounded-full border bg-card/60 text-[13.5px] font-medium transition-colors duration-300 hover:text-foreground ${motion === "on" ? "text-foreground" : "text-muted-foreground"}`}>
             {t.motionLabel}
-            <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${motion === "on" ? "bg-primary" : "bg-input"}`}>
-              <span className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-card shadow-sm transition-transform duration-300 ease-out ${motion === "on" ? "translate-x-4" : "translate-x-0"}`} />
-            </span>
+            <SwitchTrack on={motion === "on"} />
           </button>
         </div>
       )}
 
       <main>
-        {/* 01 Hero: layar lebar sinematik (sticky 210vh), chat naik & membesar saat di-scroll */}
-        <section id="top" ref={heroWrap} className={`relative overflow-x-clip ${C("min-[900px]:h-[210vh]")}`}>
-          {/* cahaya lembut di atas hero supaya latar tidak datar; ikut token tema */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_44%_at_50%_0%,var(--accent)_0%,transparent_70%)]" />
-          <div className={`relative pb-[72px] ${C("min-[900px]:sticky min-[900px]:top-0 min-[900px]:h-dvh min-[900px]:overflow-hidden min-[900px]:pb-0")}`}>
-            <div ref={heroHead} className={`relative mx-auto max-w-[1376px] pt-[clamp(112px,16vh,152px)] ${GUTTER} will-change-[transform,opacity] ${C("min-[900px]:flex min-[900px]:h-full min-[900px]:flex-col min-[900px]:justify-center min-[900px]:pt-16")}`}>
-              <h1 className="text-[length:clamp(44px,min(7vw,12vh),116px)] font-semibold leading-[1] tracking-[-.045em]">
-                <span className="sr-only">{t.h1a} {t.phrases[0]}</span>
-                <span className="block overflow-hidden pb-[.1em]">
-                  <span data-intro-line aria-hidden className="block">{t.h1a}</span>
+        {/* 01 Hero: bersih, hanya judul, kalimat pendek, dan dua tombol */}
+        <section id="top" className={`relative flex min-h-[100dvh] flex-col justify-center pt-[clamp(96px,13vh,128px)] pb-[clamp(40px,8vh,96px)] ${GUTTER}`}>
+          <div className="mx-auto w-full max-w-[1376px]">
+            <h1 className="text-[length:clamp(44px,min(7vw,12vh),116px)] font-semibold leading-[1] tracking-[-.045em]">
+              <span className="sr-only">{t.h1a} {t.phrases[0]}</span>
+              <span className="block overflow-hidden pb-[.1em]">
+                <span data-intro-line aria-hidden className="block">{t.h1a}</span>
+              </span>
+              <span className="-mt-[.1em] block overflow-hidden pb-[.1em]">
+                <span data-intro-line aria-hidden className="block text-primary">
+                  <span ref={heroH1b}>{t.phrases[0]}</span>
+                  <span className="ml-[.06em] inline-block h-[.8em] w-[.055em] rounded-[1px] bg-primary align-[-.03em] animate-[layanBlink_1.05s_steps(1)_infinite]" />
                 </span>
-                <span className="-mt-[.1em] block overflow-hidden pb-[.1em]">
-                  <span data-intro-line aria-hidden className="block text-primary">
-                    <span ref={heroH1b}>{t.phrases[0]}</span>
-                    <span className="ml-[.06em] inline-block h-[.8em] w-[.055em] rounded-[1px] bg-primary align-[-.03em] animate-[layanBlink_1.05s_steps(1)_infinite]" />
-                  </span>
-                </span>
-              </h1>
-              <div className="mt-[clamp(22px,3.6vh,40px)] flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
-                <p data-intro="2" className="m-0 max-w-[560px] text-[length:clamp(16px,1.25vw,19px)] leading-normal text-soft-foreground text-pretty">{t.heroSub}</p>
-                <div data-intro="3" className="flex flex-wrap gap-3">
-                  <Magnetic>
-                    <button type="button" onClick={gate({ key: "start", path: "/app" })} className={`${BTN_DARK} h-[54px] gap-2.5 pl-[26px] pr-[22px] text-base shadow-[0_10px_30px_-12px_rgba(22,24,26,.5)] hover:gap-[15px]`}>
-                      {t.cta1}
-                      <Arrow />
-                    </button>
-                  </Magnetic>
-                  <button type="button" onClick={() => scrollToId("cara-kerja")} className={`${BTN_LINE} h-[54px] gap-2.5 px-6 text-base`}>
-                    {t.cta2}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div ref={heroCaption} className={`pointer-events-none absolute inset-x-0 top-24 hidden px-5 text-center text-[length:clamp(24px,2.6vw,40px)] font-semibold tracking-[-.03em] opacity-0 ${C("min-[900px]:block")}`}>
-              {t.caption}
-            </div>
-
-            <div ref={heroChat} className={`relative inset-x-0 mx-auto mt-14 w-[min(960px,calc(100%-32px))] origin-top will-change-transform ${C("min-[900px]:absolute min-[900px]:top-full min-[900px]:mt-0")}`}>
-              <DoodleArrow className="pointer-events-none absolute -left-20 top-8 hidden w-24 text-primary opacity-50 min-[1280px]:block" />
-              <Sparkles className="pointer-events-none absolute -right-16 top-20 hidden w-24 text-primary opacity-40 min-[1280px]:block" />
-              <div className="overflow-hidden rounded-[28px] border bg-card shadow-[0_1px_0_rgba(22,24,26,.04),0_50px_120px_-60px_rgba(22,24,26,.4)]">
-                <div className="flex flex-col gap-[22px] p-[clamp(20px,3vw,36px)]">
-                  <div className="text-[length:clamp(22px,2.3vw,32px)] font-semibold leading-[1.15] tracking-[-.03em]">
-                    <div className="text-subtle-foreground">{t.greet1}</div>
-                    <div>{t.greet2}</div>
-                  </div>
-                  <button type="button" onClick={() => gate({ key: "ask", path: "/app", q: t.prompts[promptIdx.current] })()} aria-label={t.askAria} className="flex min-h-[66px] w-full cursor-text items-center gap-3 rounded-[18px] border bg-panel py-2.5 pl-5 pr-2.5 text-left transition-[border-color,box-shadow] duration-250 hover:border-primary hover:shadow-[0_0_0_4px_rgba(10,122,102,.08)]">
-                    <span className="min-w-0 flex-1 truncate text-base">
-                      <span ref={heroType} />
-                      <span aria-hidden className="ml-0.5 inline-block h-[19px] w-0.5 bg-primary align-[-4px] animate-[layanBlink_1s_steps(1)_infinite]" />
-                    </span>
-                    <span aria-hidden className="flex size-[46px] shrink-0 items-center justify-center rounded-[14px] bg-ink text-ink-foreground"><Up /></span>
-                  </button>
-                  <div className="flex flex-wrap gap-2">
-                    {t.services.map((s) => (
-                      <button key={s.k} type="button" onClick={gate({ key: s.k, path: "/app", q: s.q })} className="h-11 cursor-pointer rounded-full border px-4 text-sm font-medium transition-all duration-250 hover:-translate-y-px hover:border-primary hover:bg-accent hover:text-accent-foreground">
-                        {s.name}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-2.5">
-                    {t.quick.map(([k, title, sub]) => (
-                      <button key={k} type="button" onClick={k === "status" ? gate({ key: "status", path: "/app/riwayat" }) : gate({ key: k, path: "/app", q: promptOf(k) })} className="flex cursor-pointer items-center gap-3 rounded-2xl bg-muted p-3.5 text-left transition-all duration-250 hover:-translate-y-0.5 hover:bg-accent active:scale-[.98]">
-                        <span aria-hidden className="flex size-[38px] shrink-0 items-center justify-center rounded-[11px] border bg-card text-primary"><Icon d={ICONS[k]} size={18} /></span>
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <span className="text-[14.5px] font-semibold">{title}</span>
-                          <span className="text-[12.5px] text-muted-foreground">{sub}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              </span>
+            </h1>
+            <div className="mt-[clamp(22px,3.6vh,40px)] flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+              <p data-intro="2" className="m-0 max-w-[560px] text-[length:clamp(16px,1.25vw,19px)] leading-normal text-soft-foreground text-pretty">{t.heroSub}</p>
+              <div data-intro="3" className="flex flex-wrap gap-3">
+                <GoButton onClick={gate({ key: "start", path: "/app" })} className="shadow-[0_10px_30px_-12px_rgba(22,24,26,.5)]">{t.cta1}</GoButton>
+                <button type="button" onClick={() => scrollToId("cara-kerja")} className={`${BTN_LINE} h-[54px] gap-2.5 px-6 text-base`}>
+                  {t.cta2}
+                </button>
               </div>
             </div>
           </div>
         </section>
+
+        {/* 01b Yang bisa diurus mahasiswa: minta layanan (staf) dan lapor fasilitas (teknisi), berjalan sendiri */}
+        <StudentFlows lang={lang} motion={motion} />
 
         {/* 02 Layanan */}
         <section id="layanan" className={`relative flex min-h-dvh flex-col justify-center pt-[max(96px,12vh)] pb-[max(40px,6vh)] ${GUTTER}`}>
@@ -1022,7 +868,7 @@ export function Landing() {
         </section>
 
         {/* 03 Cara kerja: adegan scroll */}
-        <Story t={t} gate={gate} motion={motion} />
+        <Story t={t} motion={motion} />
 
         {/* 04 Penutup + footer */}
         <section id="mulai" className="relative flex min-h-[80dvh] flex-col">
@@ -1049,28 +895,23 @@ export function Landing() {
               ))}
             </div>
             <div data-reveal data-delay="460" className="mt-6 flex flex-wrap gap-3">
-              <Magnetic>
-                <button type="button" onClick={gate({ key: "start", path: "/app" })} className={`${BTN_DARK} h-[54px] gap-2.5 pl-[26px] pr-[22px] text-base hover:gap-[15px]`}>
-                  {t.cta1}
-                  <Arrow />
-                </button>
-              </Magnetic>
+              <GoButton onClick={gate({ key: "start", path: "/app" })}>{t.cta1}</GoButton>
               <a href="/api/app/layan.apk" download className={`group ${BTN_LINE} h-[54px] gap-2.5 px-6 text-base`}>
                 <span className="group-hover:animate-[layanNudge_.9s_ease-in-out_infinite]"><Download /></span>
                 {t.appAndroid}
               </a>
+              <Link href="/unduh" className="inline-flex h-[54px] items-center px-2 text-base font-semibold text-primary underline-offset-4 hover:underline">{t.installHow}</Link>
+            </div>
+            <div data-reveal data-delay="520" className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-[14.5px]">
+              {t.moreLinks.map(([label, href]) => (
+                <Link key={href} href={href} className="group inline-flex items-center gap-1.5 text-soft-foreground transition-colors hover:text-foreground">
+                  {label}
+                  <span className="transition-transform duration-300 group-hover:translate-x-1"><Arrow size={14} /></span>
+                </Link>
+              ))}
             </div>
           </div>
-          <footer className={`border-t py-6 ${GUTTER}`}>
-            <div className="mx-auto flex max-w-[1376px] flex-wrap items-center justify-between gap-4 text-[13.5px] text-muted-foreground">
-              <div className="flex items-center gap-2.5 text-[15px] font-extrabold tracking-[.04em] text-foreground">
-                <Mark size={22} />
-                LAYAN
-                <span className="text-[13.5px] font-normal tracking-normal text-muted-foreground">{t.foot}</span>
-              </div>
-              <span>© 2026 LAYAN</span>
-            </div>
-          </footer>
+          <SiteFooter lang={lang} />
         </section>
       </main>
 
@@ -1088,7 +929,7 @@ export function Landing() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 text-base font-extrabold tracking-[.04em]">
-              <Mark size={28} />
+              <Logo size={28} />
               LAYAN
             </div>
             <button type="button" onClick={() => setIntent(null)} aria-label={t.mClose} className="flex size-11 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
