@@ -1,3 +1,4 @@
+mod admin;
 mod agent;
 mod app_update;
 mod auth;
@@ -40,7 +41,7 @@ pub struct AppState {
         chat::list, chat::send, chat::action, chat::upload,
         requests::mine, requests::detail, requests::queue, requests::decide, requests::undo, requests::metrics,
         board::list, board::set_status,
-        app_update::latest, app_update::apk,
+        app_update::latest, app_update::apk, admin::overview,
     ),
     components(schemas(
         auth::Role, auth::User, auth::LoginReq, auth::LoginRes,
@@ -105,6 +106,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/public/stats", get(requests::public_stats))
         .route("/api/reports", get(board::list))
         .route("/api/reports/{id}/status", post(board::set_status))
+        .route("/api/admin/overview", get(admin::overview))
         .route("/api/app/latest", get(app_update::latest))
         .route("/api/app/layan.apk", get(app_update::apk))
         .with_state(state);

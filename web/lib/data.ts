@@ -21,10 +21,10 @@ export const STATUS_LABEL: Record<Status, string> = {
 
 export type Worker = "surat" | "helpdesk" | "fasilitas"
 export type Urgency = "Rendah" | "Sedang" | "Tinggi"
-export type Role = "mahasiswa" | "staf" | "teknisi"
+export type Role = "mahasiswa" | "staf" | "teknisi" | "admin"
 
 /** Halaman awal tiap peran setelah login. */
-export const HOME: Record<Role, string> = { mahasiswa: "/app", staf: "/staf", teknisi: "/teknisi" }
+export const HOME: Record<Role, string> = { mahasiswa: "/app", staf: "/staf", teknisi: "/teknisi", admin: "/admin" }
 
 /** User yang login, bentuknya sama dengan `User` di api/src/auth.rs. */
 export type Me = {

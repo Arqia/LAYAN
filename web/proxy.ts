@@ -7,6 +7,7 @@ const AREA: [string, Role][] = [
   ["/staf", "staf"],
   ["/teknisi", "teknisi"],
   ["/app", "mahasiswa"],
+  ["/admin", "admin"],
 ]
 
 const PUBLIC = new Set(["/", "/faq", "/unduh", "/status", "/keamanan", "/untuk-staf"])

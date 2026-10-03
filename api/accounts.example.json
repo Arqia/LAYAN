@@ -1,0 +1,21 @@
+[
+  {
+    "id": "juri1-mhs",
+    "role": "mahasiswa",
+    "name": "Mahasiswa Juri 1",
+    "email": "juri1-mhs-xxxxx@layan.test",
+    "password": "ganti-ini",
+    "nim": "245150200111011",
+    "prodi": "Teknik Informatika",
+    "semester": 5,
+    "ukt_paid_at": "2026-08-14",
+    "ipk": 3.62
+  },
+  {
+    "id": "admin3",
+    "role": "admin",
+    "name": "Admin 3",
+    "email": "admin1-xxxxx@layan.test",
+    "password": "ganti-ini"
+  }
+]

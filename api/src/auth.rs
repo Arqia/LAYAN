@@ -20,6 +20,8 @@ pub enum Role {
     Mahasiswa,
     Staf,
     Teknisi,
+    /// Tim pemantau: hanya halaman /admin.
+    Admin,
 }
 
 #[derive(Serialize, sqlx::FromRow, ToSchema, Clone)]
@@ -110,19 +112,18 @@ async fn fetch_user(db: &SqlitePool, id: &str) -> Result<User, AppError> {
     post, path = "/api/auth/login", request_body = LoginReq,
     responses((status = 200, body = LoginRes), (status = 401, description = "NIM/email atau password salah"))
 )]
-pub async fn login(State(s): State<AppState>, Json(req): Json<LoginReq>) -> Result<impl IntoResponse, AppError> {
+pub async fn login(State(s): State<AppState>, headers: HeaderMap, Json(req): Json<LoginReq>) -> Result<impl IntoResponse, AppError> {
     let row: Option<(String, String)> =
         sqlx::query_as("SELECT id, password_hash FROM users WHERE email = ?1 OR nim = ?1")
             .bind(req.identifier.trim())
             .fetch_optional(&s.db)
             .await?;
-    let Some((user_id, hash)) = row else {
+    let ok = row.as_ref().and_then(|(_, hash)| PasswordHash::new(hash).ok()).is_some_and(|p| Argon2::default().verify_password(req.password.as_bytes(), &p).is_ok());
+    let Some((user_id, _)) = row.filter(|_| ok) else {
+        crate::util::log_access(&s.db, None, &headers, "login_gagal", req.identifier.trim()).await;
         return Err(AppError::BadLogin);
     };
-    let parsed = PasswordHash::new(&hash).map_err(|e| AppError::Internal(anyhow::anyhow!("hash rusak: {e}")))?;
-    if Argon2::default().verify_password(req.password.as_bytes(), &parsed).is_err() {
-        return Err(AppError::BadLogin);
-    }
+    crate::util::log_access(&s.db, Some(&user_id), &headers, "login", "").await;
 
     // Catatan: token disimpan apa adanya di SQLite. Simpan hash-nya kalau DB bisa bocor ke pihak lain.
     let token = crate::util::random_hex(32);

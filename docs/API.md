@@ -37,6 +37,7 @@ Error selalu `{ "error": "pesan siap tampil ke pengguna" }` dengan status 4xx/5x
 | GET | `/api/staff/metrics` | staf | `{tokens, total, by, avg_minutes, auto, handled, auto_pct, saved_minutes}` |
 | GET | `/api/reports` | staf, teknisi | kartu laporan kerusakan untuk Board |
 | POST | `/api/reports/{id}/status` | teknisi | body `{status}`; `baru` \| `dikerjakan` \| `selesai` |
+| GET | `/api/admin/overview` | admin | pemantauan: `{activity: [{at, ip, action, detail, name, email, role}], users: [{name, email, role, ai_calls, tokens, chats, requests, ips, last}], requests}` |
 | GET | `/api/public/stats` | publik | hitungan tanpa data pribadi untuk halaman `/status`: `{requests, requests_week, answers, fixed_week, auto_pct_week}` |
 | GET | `/api/app/latest` | publik | rilis App Android terbaru (404 kalau belum ada), lihat di bawah |
 | GET | `/api/app/layan.apk` | publik | file APK terbaru; dipakai tombol "Unduh Android" di landing |
@@ -104,6 +105,12 @@ Setiap JPG/PNG yang diupload dikirim ke LLM (`Llm::classify_image`, `api/src/llm
 - Foto laporan kerusakan cukup lolos cek `tidak_pantas`.
 - Label `NULL` (PDF, agent mock, atau LLM gagal) tetap diterima; staf memeriksa saat approve. Antrean staf menampilkan
   label di `meta` lampiran (`... · dicek AI: dokumen`).
+
+## Admin dan log akses
+
+Peran `admin` hanya membuka `/admin`. Login (berhasil dan gagal), chat ke AI, aksi card, dan upload dicatat di
+`access_log` beserta IP pengguna (`CF-Connecting-IP` dari Cloudflare Tunnel, cadangan `X-Forwarded-For`).
+Akun admin, juri, dan teknisi ada di `api/accounts.json` (di-gitignore, contoh di `accounts.example.json`).
 
 ## Update App Android
 

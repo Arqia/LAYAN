@@ -114,6 +114,24 @@ pub fn hm(s: &str) -> String {
     s.replace(':', ".")
 }
 
+/// IP asli pengguna. Di server, Cloudflare Tunnel mengisi CF-Connecting-IP; lokal jatuh ke X-Forwarded-For dari Next.js.
+pub fn client_ip(h: &axum::http::HeaderMap) -> String {
+    let get = |k: &str| h.get(k).and_then(|v| v.to_str().ok()).map(|v| v.split(',').next().unwrap_or("").trim().to_owned()).filter(|v| !v.is_empty());
+    get("cf-connecting-ip").or_else(|| get("x-forwarded-for")).or_else(|| get("x-real-ip")).unwrap_or_else(|| "-".into())
+}
+
+/// Catat akses untuk pemantauan admin. Gagal mencatat tidak boleh menggagalkan layanan, cukup dilog.
+pub async fn log_access(db: &sqlx::SqlitePool, user: Option<&str>, h: &axum::http::HeaderMap, action: &str, detail: &str) {
+    let detail: String = detail.chars().take(160).collect();
+    if let Err(e) = sqlx::query("INSERT INTO access_log (user_id, ip, action, detail) VALUES (?1, ?2, ?3, ?4)")
+        .bind(user).bind(client_ip(h)).bind(action).bind(detail)
+        .execute(db)
+        .await
+    {
+        eprintln!("access_log gagal: {e}");
+    }
+}
+
 /// Hex acak kriptografis, dipakai untuk token sesi dan id lampiran.
 pub fn random_hex(bytes: usize) -> String {
     use argon2::password_hash::rand_core::{OsRng, RngCore};

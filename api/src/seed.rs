@@ -89,25 +89,64 @@ async fn reports(db: &SqlitePool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Akun dari file privat `ACCOUNTS_FILE` (default accounts.json, di-gitignore karena repo public):
+/// email dan password tetap per akun untuk juri, admin, dan teknisi. Tanpa file itu, pakai akun demo
+/// `USERS` dengan satu `SEED_PASSWORD` (pengembangan lokal). Contoh isi: accounts.example.json.
+#[derive(serde::Deserialize)]
+struct Account {
+    id: String,
+    role: String,
+    name: String,
+    email: String,
+    password: String,
+    nim: Option<String>,
+    prodi: Option<String>,
+    unit: Option<String>,
+    semester: Option<i64>,
+    ukt_paid_at: Option<String>,
+    ipk: Option<f64>,
+}
+
 async fn users(db: &SqlitePool) -> anyhow::Result<()> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(db).await?;
     if count > 0 {
         return Ok(());
     }
-    let password = std::env::var("SEED_PASSWORD").context("SEED_PASSWORD belum di-set. Salin .env.example ke .env")?;
-    for &(id, role, name, email, nim, prodi, unit, semester, ukt) in USERS {
+    let file = std::env::var("ACCOUNTS_FILE").unwrap_or_else(|_| "accounts.json".into());
+    let accounts: Vec<Account> = match std::fs::read_to_string(&file) {
+        Ok(text) => serde_json::from_str(&text).with_context(|| format!("{file} tidak valid"))?,
+        Err(_) => {
+            let password = std::env::var("SEED_PASSWORD").context("SEED_PASSWORD belum di-set. Salin .env.example ke .env")?;
+            USERS
+                .iter()
+                .map(|&(id, role, name, email, nim, prodi, unit, semester, ukt)| Account {
+                    id: id.into(),
+                    role: role.into(),
+                    name: name.into(),
+                    email: email.into(),
+                    password: password.clone(),
+                    nim: nim.map(Into::into),
+                    prodi: prodi.map(Into::into),
+                    unit: unit.map(Into::into),
+                    semester,
+                    ukt_paid_at: ukt.map(Into::into),
+                    ipk: None,
+                })
+                .collect()
+        }
+    };
+    for a in &accounts {
         let hash = Argon2::default()
-            .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
+            .hash_password(a.password.as_bytes(), &SaltString::generate(&mut OsRng))
             .map_err(|e| anyhow::anyhow!("hash gagal: {e}"))?
             .to_string();
         sqlx::query(
-            "INSERT INTO users (id, role, name, email, nim, prodi, unit, semester, ukt_paid_at, password_hash) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO users (id, role, name, email, nim, prodi, unit, semester, ukt_paid_at, ipk, password_hash)              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )
-        .bind(id).bind(role).bind(name).bind(email).bind(nim).bind(prodi).bind(unit).bind(semester).bind(ukt).bind(hash)
+        .bind(&a.id).bind(&a.role).bind(&a.name).bind(&a.email).bind(&a.nim).bind(&a.prodi).bind(&a.unit).bind(a.semester).bind(&a.ukt_paid_at).bind(a.ipk).bind(hash)
         .execute(db)
         .await?;
     }
-    println!("seed: {} akun demo dibuat", USERS.len());
+    println!("seed: {} akun dibuat", accounts.len());
     Ok(())
 }

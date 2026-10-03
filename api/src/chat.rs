@@ -4,7 +4,7 @@ use std::convert::Infallible;
 
 use axum::body::Body;
 use axum::extract::{Multipart, Path, State};
-use axum::http::header;
+use axum::http::{header, HeaderMap};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -36,6 +36,7 @@ pub struct SendReq {
 pub async fn send(
     State(s): State<AppState>,
     me: CurrentUser,
+    headers: HeaderMap,
     Json(r): Json<SendReq>,
 ) -> Result<impl IntoResponse, AppError> {
     me.require(Role::Mahasiswa)?;
@@ -43,6 +44,7 @@ pub async fn send(
     if text.is_empty() || text.chars().count() > 2000 {
         return Err(AppError::Bad("Pesan kosong atau terlalu panjang.".into()));
     }
+    crate::util::log_access(&s.db, Some(&me.user.id), &headers, "chat", text).await;
     Ok(stream(s, me.user, Input::Text(text.to_owned())))
 }
 
@@ -60,9 +62,11 @@ pub struct ActionReq {
 pub async fn action(
     State(s): State<AppState>,
     me: CurrentUser,
+    headers: HeaderMap,
     Json(r): Json<ActionReq>,
 ) -> Result<impl IntoResponse, AppError> {
     me.require(Role::Mahasiswa)?;
+    crate::util::log_access(&s.db, Some(&me.user.id), &headers, "aksi", &r.action).await;
     Ok(stream(s, me.user, Input::Action { message_id: r.message_id, action: r.action, payload: r.payload }))
 }
 
@@ -92,7 +96,7 @@ fn stream(s: AppState, me: User, input: Input) -> impl IntoResponse {
 /* ---------- lampiran ---------- */
 
 #[utoipa::path(post, path = "/api/attachments", responses((status = 200, description = "{id, name, size}")))]
-pub async fn upload(State(s): State<AppState>, me: CurrentUser, mut mp: Multipart) -> Result<Json<Value>, AppError> {
+pub async fn upload(State(s): State<AppState>, me: CurrentUser, headers: HeaderMap, mut mp: Multipart) -> Result<Json<Value>, AppError> {
     me.require(Role::Mahasiswa)?;
     let too_big = || AppError::Bad("File lebih dari 5 MB. Kecilkan dulu atau foto ulang.".into());
     let field = mp.next_field().await.map_err(|_| too_big())?.ok_or_else(|| AppError::Bad("File belum dipilih.".into()))?;
@@ -107,6 +111,7 @@ pub async fn upload(State(s): State<AppState>, me: CurrentUser, mut mp: Multipar
     }
     // Catatan: hanya gambar yang dicek; PDF lolos tanpa label (staf tetap memeriksa saat approve).
     let label = if mime.starts_with("image/") { s.llm.classify_image(&mime, &bytes).await } else { None };
+    crate::util::log_access(&s.db, Some(&me.user.id), &headers, "upload", &format!("{name} ({})", label.unwrap_or("tidak dicek"))).await;
     if label == Some("tidak_pantas") {
         eprintln!("lampiran ditolak: gambar tidak pantas (user {})", me.user.id);
         return Err(AppError::Bad("Gambar ini tidak pantas untuk layanan kampus dan tidak disimpan. Upload foto atau scan dokumen yang sesuai.".into()));
