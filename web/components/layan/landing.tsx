@@ -29,6 +29,7 @@ const ID = {
   heroSub: "Ajukan surat akademik, tanya aturan akademik, booking ruang, atau lapor kerusakan. Keputusan akhir tetap di staf kampus.",
   cta1: "Mulai dengan LAYAN", cta2: "Lihat cara kerja",
   chatStatus: "Asisten layanan kampus · aktif",
+  greet1: "Halo.", greet2: "Mau urus apa hari ini?",
 
   svcA: "Empat layanan.", svcB: "Satu tempat.",
   svcSub: "Pilih layanan untuk melihat LAYAN menanganinya.",
@@ -88,6 +89,7 @@ const EN: Dict = {
   heroSub: "Request academic letters, ask about academic rules, book a room, or report damage. Campus staff still make the final call.",
   cta1: "Start with LAYAN", cta2: "See how it works",
   chatStatus: "Campus service assistant · online",
+  greet1: "Hi there.", greet2: "What do you need today?",
 
   svcA: "Four services.", svcB: "One place.",
   svcSub: "Pick a service to see how LAYAN handles it.",
@@ -180,7 +182,6 @@ const MSG_IN = "animate-[layanMsgIn_.6s_cubic-bezier(.2,.7,.2,1)_both]"
 const BTN_DARK = "inline-flex cursor-pointer items-center whitespace-nowrap rounded-full bg-ink font-semibold text-ink-foreground transition-all duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:-translate-y-0.5 active:scale-[.98]"
 const BTN_LINE = "inline-flex cursor-pointer items-center whitespace-nowrap rounded-full border border-input font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground hover:bg-card active:scale-[.98]"
 const BTN_ACC = "inline-flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground transition-all duration-250 hover:-translate-y-px hover:bg-primary-hover active:scale-[.98]"
-const TAG = "rounded-full border px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
 
 function Icon({ d, size = 20, sw = 1.6 }: { d: string; size?: number; sw?: number }) {
   return (
@@ -201,7 +202,6 @@ const SwitchTrack = ({ on }: { on: boolean }) => (
   </span>
 )
 
-const Pulse = () => <span className="size-1.5 shrink-0 rounded-full bg-primary animate-[layanPulse_2.4s_infinite]" />
 const Dots = () => (
   <span className="flex gap-[5px]">
     {[0, 0.15, 0.3].map((d) => (
@@ -209,24 +209,6 @@ const Dots = () => (
     ))}
   </span>
 )
-
-function ChatHead({ size, status, right }: { size: number; status: string; right?: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b px-[18px] py-3.5">
-      <div className="flex items-center gap-2.5">
-        <Logo size={size} />
-        <div>
-          <div className="text-[14.5px] font-semibold">LAYAN</div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Pulse />
-            {status}
-          </div>
-        </div>
-      </div>
-      {right}
-    </div>
-  )
-}
 
 /** CTA utama: tombol diam di tempat; saat hover panah di dalam lingkaran berganti (keluar kanan, masuk dari kiri). */
 function GoButton({ onClick, children, className = "" }: { onClick: () => void; children: ReactNode; className?: string }) {
@@ -305,7 +287,6 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
       </div>
 
       <div data-reveal data-delay="160" className={CARD}>
-        <ChatHead size={30} status={t.chatStatus} right={<span className={TAG}>{t.sampleTag}</span>} />
         {/* key: ganti layanan = percakapan diputar ulang dari awal */}
         <div key={s.k + t.sampleTag} role="tabpanel" aria-live="polite" className="flex min-h-[380px] flex-col justify-end gap-3.5 p-[clamp(16px,2.4vw,24px)]">
           <div className={`${USER_BUBBLE} ${MSG_IN}`}>{s.q}</div>
@@ -499,8 +480,11 @@ function Story({ t, motion }: { t: Dict; motion: Motion }) {
         </div>
 
         <div className={`pointer-events-none flex h-[min(560px,70dvh)] select-none flex-col lg:h-[min(620px,calc(100dvh-200px))] ${CARD}`}>
-          <ChatHead size={30} status={t.chatStatus} right={stage >= 1 && sub + stage > 1 ? <span className={`rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground ${MSG_IN}`}>{t.sDetected}</span> : undefined} />
           <div aria-live="polite" className="flex min-h-0 flex-1 flex-col justify-end gap-3.5 overflow-hidden p-[clamp(16px,2.4vw,24px)] [mask-image:linear-gradient(to_bottom,transparent,#000_40px)]">
+            <div className="flex flex-col gap-1 text-[length:clamp(22px,2.3vw,32px)] font-semibold leading-[1.15] tracking-[-.03em]">
+              <div className="text-subtle-foreground">{t.greet1}</div>
+              <div>{t.greet2}</div>
+            </div>
             {stage >= 1 && <div className={`${USER_BUBBLE} ${MSG_IN}`}>{t.sPrompt}</div>}
 
             {stage === 1 && (

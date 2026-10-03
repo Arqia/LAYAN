@@ -46,5 +46,5 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   // aset publik & PWA tidak perlu login
-  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|version|sw.js|pwa-icon|icon|apple-icon|offline|opengraph-image|qr-apk.svg).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|design-system|manifest.webmanifest|version|sw.js|pwa-icon|icon|apple-icon|offline|opengraph-image|qr-apk.svg|logo.svg).*)"],
 }

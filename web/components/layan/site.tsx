@@ -35,12 +35,15 @@ export const setLang = (l: Lang) => {
 }
 export const useLang = () => useSyncExternalStore(subscribeLang, readLang, () => "id" as Lang)
 
+/** Logo LAYAN (public/logo.svg): kotak ink + huruf L + titik hijau. */
 export function Logo({ size }: { size: number }) {
-  const bar = Math.max(2, Math.round(size / 10))
   return (
-    <span aria-hidden className="inline-flex shrink-0 flex-col justify-center bg-primary" style={{ width: size, height: size, borderRadius: size * 0.31, gap: bar + 1, padding: `0 ${Math.round(size * 0.24)}px` }}>
-      <span className="w-full rounded-sm bg-primary-foreground" style={{ height: bar }} />
-      <span className="w-[60%] rounded-sm bg-primary-foreground" style={{ height: bar }} />
+    <span aria-hidden className="inline-flex shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 72 72" width={size} height={size} aria-hidden>
+        <rect width="72" height="72" rx="18" fill="#16181A" />
+        <path d="M25,19 V51 H47" fill="none" stroke="#F0F0EC" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="51" cy="21" r="7" fill="#0A7A66" />
+      </svg>
     </span>
   )
 }

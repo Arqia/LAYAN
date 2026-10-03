@@ -3,14 +3,15 @@ import { BookOpen, Building2, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { STATUS_LABEL, type Status, type Urgency, type Worker } from "@/lib/data"
 
-/** Mark LAYAN: kotak primary + isi kotak kecil. */
+/** Mark LAYAN: logo resmi (kotak ink + huruf L + titik hijau). Lihat `public/logo.svg`. */
 export function Mark({ size = 26, className }: { size?: number; className?: string }) {
   return (
-    <span
-      className={cn("grid flex-none place-items-center rounded-[8px] bg-primary", className)}
-      style={{ width: size, height: size }}
-    >
-      <span className="rounded-[2.5px] bg-primary-foreground" style={{ width: size * 0.35, height: size * 0.35 }} />
+    <span aria-hidden className={cn("inline-flex flex-none", className)} style={{ width: size, height: size }}>
+      <svg viewBox="0 0 72 72" width={size} height={size} aria-hidden>
+        <rect width="72" height="72" rx="18" fill="#16181A" />
+        <path d="M25,19 V51 H47" fill="none" stroke="#F0F0EC" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="51" cy="21" r="7" fill="#0A7A66" />
+      </svg>
     </span>
   )
 }
