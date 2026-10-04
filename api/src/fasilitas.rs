@@ -203,7 +203,7 @@ fn assignee_for(category: &str) -> &'static str {
 /// Status permintaan mahasiswa mengikuti status laporan di board teknisi.
 pub fn request_status(report_status: &str) -> &'static str {
     match report_status {
-        "dikerjakan" => "processing",
+        "dikerjakan" | "eskalasi" => "processing",
         "selesai" => "done",
         _ => "submitted",
     }

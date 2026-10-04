@@ -39,7 +39,7 @@ pub struct AppState {
     paths(
         health, auth::login, auth::logout, auth::me,
         chat::list, chat::send, chat::reset, chat::action, chat::upload,
-        requests::mine, requests::detail, requests::cancel, requests::queue, requests::decide, requests::undo, requests::metrics,
+        requests::mine, requests::detail, requests::cancel, requests::queue, requests::decide, requests::undo, requests::metrics, requests::metrics_daily,
         board::list, board::set_status,
         app_update::latest, app_update::apk, admin::overview,
     ),
@@ -104,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/staff/requests/{id}/decide", post(requests::decide))
         .route("/api/staff/requests/{id}/undo", post(requests::undo))
         .route("/api/staff/metrics", get(requests::metrics))
+        .route("/api/staff/metrics/daily", get(requests::metrics_daily))
         .route("/api/public/stats", get(requests::public_stats))
         .route("/api/reports", get(board::list))
         .route("/api/reports/{id}/status", post(board::set_status))

@@ -37,8 +37,9 @@ Error selalu `{ "error": "pesan siap tampil ke pengguna" }` dengan status 4xx/5x
 | POST | `/api/staff/requests/{id}/decide` | staf | body `{approve, reason?, answer?}`; `reason` wajib saat menolak, `answer` wajib saat menjawab tiket |
 | POST | `/api/staff/requests/{id}/undo` | staf | batalkan keputusan |
 | GET | `/api/staff/metrics` | staf | `{tokens, total, by, avg_minutes, auto, handled, auto_pct, saved_minutes}` |
-| GET | `/api/reports` | staf, teknisi | kartu laporan kerusakan untuk Board |
-| POST | `/api/reports/{id}/status` | teknisi | body `{status}`; `baru` \| `dikerjakan` \| `selesai` |
+| GET | `/api/staff/metrics/daily?days=30` | staf | tren harian WIB, hari kosong tetap ada (0), urut lama ke baru: `[{date: "YYYY-MM-DD", total, auto, surat, tiket, booking, laporan}]`; `days` 1-90, default 30. Rumus `total`/`auto` sama dengan `/api/staff/metrics` |
+| GET | `/api/reports` | staf, teknisi | kartu laporan kerusakan, terbaru dulu: `[{id, room, title, category, urgency, status, assignee, tech, reporters, photo, note, time, updated, created_at, updated_at}]`; `created_at`/`updated_at` detik unix, `note` alasan eskalasi atau null |
+| POST | `/api/reports/{id}/status` | teknisi | body `{status, note?}` → `{ok, notified}`. Alur: `baru→dikerjakan` (Terima), `dikerjakan→selesai`, `dikerjakan→eskalasi`, `eskalasi→selesai`; lainnya 400. `note` wajib saat `eskalasi` (≥ 10 huruf). Pelapor dikabari lewat chat saat `selesai` dan `eskalasi`; permintaannya berstatus `processing` selama eskalasi |
 | GET | `/api/admin/overview` | admin | pemantauan: `{activity: [{at, ip, action, detail, name, email, role}], users: [{name, email, role, ai_calls, tokens, chats, requests, ips, last}], requests}` |
 | GET | `/api/public/stats` | publik | hitungan tanpa data pribadi untuk halaman `/status`: `{requests, requests_week, answers, fixed_week, auto_pct_week}` |
 | GET | `/api/app/latest` | publik | rilis App Android terbaru (404 kalau belum ada), lihat di bawah |

@@ -1,6 +1,6 @@
 //! Permintaan layanan: riwayat mahasiswa, detail (juga untuk cetak surat), antrean staf, dan metrik dampak.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -10,7 +10,7 @@ use crate::agent::insert_message;
 use crate::auth::{CurrentUser, Role};
 use crate::error::AppError;
 use crate::tools::{letter_fields, letter_of, merge_data};
-use crate::util::{clock, day_label, hm, now, parse_iso, today_start, when};
+use crate::util::{clock, day_label, day_of, hm, iso, now, parse_iso, today_start, when};
 use crate::AppState;
 
 #[derive(sqlx::FromRow)]
@@ -502,6 +502,48 @@ pub async fn metrics(State(s): State<AppState>, me: CurrentUser) -> Result<Json<
         "auto_pct": if handled > 0 { auto * 100 / handled } else { 0 },
         "saved_minutes": saved,
     })))
+}
+
+#[derive(Deserialize)]
+pub struct DailyQuery {
+    days: Option<i64>,
+}
+
+/// Tren harian (WIB) untuk chart di /staf/metrik. Rumus sama dengan metrics(), dipecah per hari; hari kosong tetap muncul (0).
+#[utoipa::path(get, path = "/api/staff/metrics/daily", params(("days" = Option<i64>, Query, description = "1-90, default 30")), responses((status = 200)))]
+pub async fn metrics_daily(State(s): State<AppState>, me: CurrentUser, Query(q): Query<DailyQuery>) -> Result<Json<Vec<Value>>, AppError> {
+    me.require(Role::Staf)?;
+    let days = q.days.unwrap_or(30).clamp(1, 90);
+    let first = day_of(now()) - days + 1;
+    let since = today_start() - (days - 1) * 86_400;
+    // (hari, worker, ada report_id, jumlah); hari = day_of(created_at) dalam SQL (WIB = +25200 detik)
+    let reqs: Vec<(i64, String, bool, i64)> = sqlx::query_as(
+        "SELECT (created_at + 25200) / 86400, worker, json_extract(data, '$.report_id') IS NOT NULL, COUNT(*)          FROM requests WHERE created_at >= ?1 GROUP BY 1, 2, 3",
+    )
+    .bind(since)
+    .fetch_all(&s.db)
+    .await?;
+    let audit: Vec<(i64, i64, i64)> = sqlx::query_as(
+        "SELECT (at + 25200) / 86400, SUM(tool = 'answerWithCitation'),          SUM(tool = 'checkLetterRequirements' AND result LIKE 'Belum terpenuhi%') FROM audit_log WHERE at >= ?1 GROUP BY 1",
+    )
+    .bind(since)
+    .fetch_all(&s.db)
+    .await?;
+
+    let out = (first..first + days)
+        .map(|d| {
+            let n = |w: &str, report: bool| reqs.iter().filter(|r| r.0 == d && r.1 == w && (w != "fasilitas" || r.2 == report)).map(|r| r.3).sum::<i64>();
+            let (surat, tiket, laporan, booking) = (n("surat", false), n("helpdesk", false), n("fasilitas", true), n("fasilitas", false));
+            let (jawaban, ditahan) = audit.iter().find(|a| a.0 == d).map_or((0, 0), |a| (a.1, a.2));
+            json!({
+                "date": iso(d),
+                "total": surat + tiket + laporan + booking + jawaban,
+                "auto": jawaban + laporan + ditahan,
+                "surat": surat, "tiket": tiket, "booking": booking, "laporan": laporan,
+            })
+        })
+        .collect();
+    Ok(Json(out))
 }
 
 /// Angka publik untuk halaman /status: tanpa login, hanya hitungan (tanpa data pribadi).
