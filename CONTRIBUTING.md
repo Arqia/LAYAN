@@ -15,9 +15,9 @@ Mengubah bentuk data dari API? Buka PR yang mengubah `api/` dan `docs/API.md` se
 
 ## Alur kerja
 
-1. Baca [`AGENTS.md`](AGENTS.md) (wajib juga untuk AI yang kamu pakai) dan issue yang ditugaskan ke kamu ([Issues](https://github.com/arvamadax/LAYAN/issues), label `arqia` / `boas`). Branch dari `main`: `farrel/<topik>` atau `boas/<topik>`.
-2. Commit kecil, satu issue per PR ke `main`, deskripsi PR wajib memuat `Closes #<nomor issue>`. Review oleh minimal satu orang lain; perubahan yang menyentuh kontrak API di-review Arva.
-3. Hanya Arva yang merge ke `main` dan deploy ke server.
+1. Baca [`AGENTS.md`](AGENTS.md) (wajib juga untuk AI yang kamu pakai) dan issue yang ditugaskan ke kamu ([Issues](https://github.com/arvamadax/LAYAN/issues), label `arqia` / `boas`). Branch kerja masing-masing: **Arqia → `dev/arqia`**, **Boas → `dev/boas`**. Push (atau PR dari fork) hanya ke branch dev milikmu sendiri.
+2. Commit kecil, satu issue per PR ke `dev/<nama>`, deskripsi PR wajib memuat `Closes #<nomor issue>`. Push/PR ke `main` atau ke branch dev orang lain ditandai gagal oleh workflow "Batas branch". Review oleh minimal satu orang lain; perubahan yang menyentuh kontrak API di-review Arva.
+3. `main` dikunci: hanya Arva yang merge `dev/<nama>` → `main` (issue tertutup saat itu) dan deploy ke server.
 4. Repo ini **publik**: jangan commit password, `.env`, keystore, atau file dari luar proyek. Pesan commit tanpa jejak alat AI (tanpa `Co-Authored-By` AI).
 
 ## Jalankan lokal (PWA saja, tanpa Rust)

@@ -1,0 +1,27 @@
+# Tiap anggota hanya boleh push / PR ke branch dev miliknya; main hanya Arva.
+# Repo akun pribadi tidak bisa membatasi push per user, jadi pelanggaran ditandai merah di sini.
+name: Batas branch
+on:
+  pull_request:
+    branches: [main, "dev/**"]
+  push:
+    branches: ["dev/**"]
+jobs:
+  cek:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BASE: ${{ github.base_ref || github.ref_name }}
+          WHO: ${{ github.event.pull_request.user.login || github.actor }}
+        run: |
+          case "$BASE" in
+            main) ok=arvamadax ;;
+            dev/arqia) ok=Arqia ;;
+            dev/boas) ok=boasvanjosep ;;
+            *) echo "::error::Branch $BASE tidak dikenal. Pakai dev/arqia atau dev/boas."; exit 1 ;;
+          esac
+          if [ "$WHO" != "$ok" ] && [ "$WHO" != arvamadax ]; then
+            echo "::error::$WHO tidak boleh push/PR ke $BASE. Gunakan branch dev milikmu sendiri."
+            exit 1
+          fi
+          echo "OK: $WHO -> $BASE"

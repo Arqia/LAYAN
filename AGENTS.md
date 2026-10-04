@@ -98,7 +98,8 @@ dan CSS variable baru. Butuh warna baru? Minta Arva menambah token.
 
 ## 6. Commit dan PR
 
-- Branch dari `main` milikmu (di fork), PR ke `arvamadax/LAYAN` `main`. Satu issue per PR, deskripsi wajib memuat `Closes #<nomor issue>`.
+- Push/PR **hanya** ke branch dev milikmu: Arqia → `dev/arqia`, Boas → `dev/boas` (dari repo ini atau dari fork). **Jangan** push/PR ke `main` atau branch dev orang lain.
+- Satu issue per PR, deskripsi wajib memuat `Closes #<nomor issue>`.
 - Commit kecil, pesan Bahasa Indonesia. **Tanpa** baris `Co-Authored-By` atau "Generated with" dari AI.
 - Jangan commit `.env`, password, token, atau file di luar proyek.
 - Deskripsi PR berisi: apa yang berubah, file yang disentuh di luar wilayah (kalau ada) dan alasannya, asumsi,
