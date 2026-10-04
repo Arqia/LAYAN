@@ -250,6 +250,15 @@ pub async fn run(s: &AppState, me: &User, input: Input, tx: &Sender<Ev>) -> anyh
             cx.set_card_state(message_id, "submitted").await?;
             cx.th.transcript.push(llm::user("[aksi] Mahasiswa menekan tombol \"Masih bingung? Buat tiket\"."));
         }
+        Input::Action { message_id: _, action, payload } if action == "resume" => {
+            // Lanjutkan pengajuan tertunda (message_id diabaikan, isi 0).
+            // Menerbitkan ulang kartu yang tepat; submit/upload berikutnya
+            // jalan lewat jalur action normal.
+            let id = payload["request_id"].as_str().unwrap_or("");
+            tools::resume_request(&mut cx, id).await?;
+            cx.th.save(&s.db, &me.id).await?;
+            return Ok(());
+        }
         Input::Action { message_id, action, payload } => {
             let p = cx.th.pending.clone().filter(|p| p.message_id == message_id).ok_or_else(|| Nope("Card ini sudah tidak aktif.".into()))?;
             let result = tools::resume(&mut cx, &p, &action, &payload).await?;

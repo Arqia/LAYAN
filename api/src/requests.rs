@@ -32,7 +32,7 @@ const SELECT: &str = "SELECT r.id, r.student_id, r.worker, r.title, r.status, r.
                       FROM requests r JOIN users u ON u.id = r.student_id";
 
 /// Jenis permintaan untuk tampilan: surat | tiket | booking | laporan
-fn kind(worker: &str, d: &Value) -> &'static str {
+pub(crate) fn kind(worker: &str, d: &Value) -> &'static str {
     match worker {
         "surat" => "surat",
         "helpdesk" => "tiket",
@@ -122,6 +122,7 @@ pub async fn mine(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Vec
     for r in &rows {
         let d = r.data();
         let meta = match (r.kind(&d), r.status.as_str()) {
+            (_, "cancelled") => "Dibatalkan".into(),
             (_, "rejected") => d["reject_reason"].as_str().unwrap_or("Ditolak staf").to_owned(),
             ("surat", "approved" | "done") => format!("{} · disetujui {}", d["letter_no"].as_str().unwrap_or(""), d["approved_by"].as_str().unwrap_or("staf")),
             ("surat", "pending_approval") => match letter_fields(&d).first() {
@@ -147,7 +148,7 @@ pub async fn mine(State(s): State<AppState>, me: CurrentUser) -> Result<Json<Vec
             "status": r.status,
             "time": when(r.created_at),
             "meta": meta,
-            "active": !matches!(r.status.as_str(), "approved" | "rejected" | "done"),
+            "active": !matches!(r.status.as_str(), "approved" | "rejected" | "done" | "cancelled"),
         }));
     }
     Ok(Json(out))
@@ -409,6 +410,27 @@ pub async fn undo(State(s): State<AppState>, me: CurrentUser, Path(id): Path<Str
     .await?;
     audit_staf(&s.db, &r, "undoDecision", &format!("Keputusan dibatalkan {}", me.user.name)).await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+/// Batalkan permintaan oleh mahasiswa pemiliknya. Hanya selama belum selesai
+/// (belum disetujui/ditolak/selesai/dibatalkan). Tahan ruang ikut dilepas,
+/// antrean staf ikut kosong karena queue hanya berisi status pending_approval.
+#[utoipa::path(post, path = "/api/requests/{id}/cancel", params(("id" = String, Path)), responses((status = 200)))]
+pub async fn cancel(State(s): State<AppState>, me: CurrentUser, Path(id): Path<String>) -> Result<Json<Value>, AppError> {
+    me.require(Role::Mahasiswa)?;
+    let r = load(&s.db, &id).await?;
+    if r.student_id != me.user.id {
+        return Err(AppError::NotFound);
+    }
+    if !matches!(r.status.as_str(), "submitted" | "needs_info" | "processing" | "pending_approval") {
+        return Err(AppError::Bad("Permintaan ini sudah selesai dan tidak bisa dibatalkan.".into()));
+    }
+    sqlx::query("UPDATE requests SET status = 'cancelled', updated_at = unixepoch() WHERE id = ?1").bind(&r.id).execute(&s.db).await?;
+    sqlx::query("UPDATE bookings SET status = 'released' WHERE request_id = ?1 AND status = 'held'").bind(&r.id).execute(&s.db).await?;
+    sqlx::query("INSERT INTO audit_log (student_id, request_id, actor, tool, result) VALUES (?1, ?2, 'mahasiswa', 'cancel', ?3)")
+        .bind(&r.student_id).bind(&r.id).bind(format!("{} dibatalkan {}", r.title, me.user.name))
+        .execute(&s.db).await?;
+    Ok(Json(json!({ "ok": true, "status": "cancelled" })))
 }
 
 /* ---------- metrik dampak ---------- */

@@ -19,6 +19,7 @@ const STATUS_DESC: Record<Status, string> = {
   approved: "Staf approve",
   rejected: "Staf reject, alasan wajib tampil",
   done: "Hasil sudah diterima mahasiswa",
+  cancelled: "Dibatalkan mahasiswa sebelum selesai",
 }
 const WORKERS: [Worker, string, string][] = [
   ["surat", "Surat", "Surat Aktif Kuliah, Surat Dispensasi"],

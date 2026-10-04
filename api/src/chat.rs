@@ -4,7 +4,7 @@ use std::convert::Infallible;
 
 use axum::body::Body;
 use axum::extract::{Multipart, Path, State};
-use axum::http::{header, HeaderMap};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -51,7 +51,7 @@ pub async fn send(
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct ActionReq {
     pub message_id: i64,
-    /// submit | upload | ticket
+    /// submit | upload | ticket | resume (lanjutkan pengajuan; message_id diabaikan, payload.request_id wajib)
     pub action: String,
     #[serde(default)]
     pub payload: Value,
@@ -91,6 +91,16 @@ fn stream(s: AppState, me: User, input: Input) -> impl IntoResponse {
     // no-transform: proxy (rewrite Next.js, nginx) jangan mengompres/menahan stream
     let headers = [(header::CACHE_CONTROL, "no-cache, no-transform"), (header::HeaderName::from_static("x-accel-buffering"), "no")];
     (headers, Sse::new(events).keep_alive(KeepAlive::default()))
+}
+
+/// Mulai percakapan baru: hapus bubble chat + state agent milik mahasiswa ini.
+/// Permintaan resmi di Riwayat dan audit log TIDAK ikut dihapus.
+#[utoipa::path(delete, path = "/api/chat", responses((status = 204, description = "Percakapan dikosongkan")))]
+pub async fn reset(State(s): State<AppState>, me: CurrentUser) -> Result<StatusCode, AppError> {
+    me.require(Role::Mahasiswa)?;
+    sqlx::query("DELETE FROM chat_messages WHERE student_id = ?1").bind(&me.user.id).execute(&s.db).await?;
+    sqlx::query("DELETE FROM threads WHERE student_id = ?1").bind(&me.user.id).execute(&s.db).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /* ---------- lampiran ---------- */

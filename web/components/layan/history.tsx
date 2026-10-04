@@ -2,10 +2,12 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { ArrowLeft, CircleAlert, FileText, Inbox, MessageCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, ChevronRight, CircleAlert, FileText, Inbox, MessageCircle, MessageCirclePlus, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { api } from "@/lib/api"
+import { api, post, stream } from "@/lib/api"
 import { STATUS_LABEL, type Status, type Worker } from "@/lib/data"
 import { StatusBadge, WorkerTile } from "./primitives"
 
@@ -41,10 +43,11 @@ function Frame({ title, back, children, footer }: { title: string; back: string;
 function useApi<T>(path: string) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState("")
+  const [n, setN] = useState(0)
   useEffect(() => {
     api<T>(path).then(setData, (e: Error) => setError(e.message))
-  }, [path])
-  return { data, error }
+  }, [path, n])
+  return { data, error, reload: () => setN((x) => x + 1) }
 }
 
 function ErrorLine({ message }: { message: string }) {
@@ -68,18 +71,21 @@ function ListSkeleton() {
 
 export function HistoryList() {
   const { data, error } = useApi<Item[]>("/requests")
-  const [filter, setFilter] = useState<"semua" | "aktif" | "selesai">("semua")
+  const [filter, setFilter] = useState<"semua" | "aktif" | "selesai" | "dibatalkan">("semua")
   const items = data ?? []
   const active = items.filter((h) => h.active)
-  const done = items.filter((h) => !h.active)
+  const done = items.filter((h) => !h.active && h.status !== "cancelled")
+  const cancelled = items.filter((h) => h.status === "cancelled")
   const groups = [
-    { label: "Aktif", items: active, show: filter !== "selesai" },
-    { label: "Selesai", items: done, show: filter !== "aktif" },
+    { label: "Aktif", items: active, show: filter === "semua" || filter === "aktif" },
+    { label: "Selesai", items: done, show: filter === "semua" || filter === "selesai" },
+    { label: "Dibatalkan", items: cancelled, show: filter === "semua" || filter === "dibatalkan" },
   ]
   const chips = [
     { key: "semua", label: "Semua" },
     { key: "aktif", label: "Aktif", count: active.length },
     { key: "selesai", label: "Selesai" },
+    { key: "dibatalkan", label: "Dibatalkan", count: cancelled.length },
   ] as const
 
   return (
@@ -154,8 +160,12 @@ export function HistorySidebar({ refresh }: { refresh: number }) {
 
   return (
     <aside className="hidden w-[320px] flex-none flex-col border-r bg-card lg:flex">
-      <div className="flex h-14 flex-none items-center px-4">
+      <div className="flex h-14 flex-none items-center justify-between gap-2 pl-4 pr-2">
         <h2 className="text-[15px] font-bold">Riwayat permintaan</h2>
+        <Link href="/app/riwayat" className="inline-flex h-9 cursor-pointer items-center gap-0.5 rounded-full px-3 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-background hover:text-foreground">
+          Lihat semua
+          <ChevronRight className="size-4" />
+        </Link>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         {!items && <ListSkeleton />}
@@ -209,7 +219,18 @@ const KIND_STEPS: Record<Exclude<Kind, "surat">, Step[]> = {
 }
 
 export function HistoryDetail({ id }: { id: string }) {
-  const { data: d, error } = useApi<Detail>(`/requests/${encodeURIComponent(id)}`)
+  const router = useRouter()
+  const { data: d, error, reload } = useApi<Detail>(`/requests/${encodeURIComponent(id)}`)
+  const [busyAct, setBusyAct] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+
+  // Lengan konfirmasi tombol batal lepas sendiri setelah 3 detik.
+  useEffect(() => {
+    if (!confirmCancel) return
+    const t = setTimeout(() => setConfirmCancel(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmCancel])
+
   if (error || !d)
     return (
       <Frame title="Detail permintaan" back="/app/riwayat">
@@ -219,35 +240,87 @@ export function HistoryDetail({ id }: { id: string }) {
 
   const steps: Step[] = d.kind === "surat" ? STEPS : KIND_STEPS[d.kind]
   const rejected = d.status === "rejected"
+  const cancelled = d.status === "cancelled"
   // ditolak: tandai di langkah keputusan (langkah terakhir sebelum selesai)
   const cur = rejected ? Math.max(0, steps.findIndex((s) => ["approved", "done"].includes(s.status))) : steps.findIndex((s) => s.status === d.status)
   const hasLetter = !!d.letter
+  const reqId = d.id
+  const resumable = ["needs_info", "submitted", "processing"].includes(d.status)
+  const cancellable = ["submitted", "needs_info", "processing", "pending_approval"].includes(d.status)
+
+  // Lanjutkan di chat: server menerbitkan ulang kartu yang tertunda,
+  // lalu buka chat untuk mengisinya.
+  async function resume() {
+    if (busyAct) return
+    setBusyAct(true)
+    try {
+      await stream("/chat/action", { message_id: 0, action: "resume", payload: { request_id: reqId } }, () => {})
+      router.push("/app")
+    } catch (e) {
+      toast.error((e as Error).message)
+      setBusyAct(false)
+    }
+  }
+
+  async function cancel() {
+    if (busyAct) return
+    if (!confirmCancel) {
+      setConfirmCancel(true)
+      toast.info("Ketuk lagi untuk membatalkan permintaan", { description: "Status menjadi Dibatalkan dan keluar dari antrean staf." })
+      return
+    }
+    setConfirmCancel(false)
+    setBusyAct(true)
+    try {
+      await post(`/requests/${encodeURIComponent(reqId)}/cancel`)
+      toast.success("Permintaan dibatalkan")
+      reload()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusyAct(false)
+    }
+  }
 
   return (
     <Frame
       title="Detail permintaan"
       back="/app/riwayat"
       footer={
-        <div className="grid flex-none grid-cols-2 gap-2 border-t px-4 py-3">
-          <Button variant="outline" size="lg" disabled={!hasLetter} asChild={hasLetter}>
+        <div className="flex flex-none flex-col gap-2 border-t px-4 py-3">
+          {resumable && (
+            <Button size="lg" disabled={busyAct} onClick={resume}>
+              <MessageCirclePlus />
+              Lanjutkan di chat
+            </Button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
             {hasLetter ? (
-              <Link href={`/surat/${d.id}`}>
-                <FileText />
-                {d.status === "approved" ? "Unduh surat" : "Lihat draft"}
-              </Link>
+              <Button variant="outline" size="lg" asChild>
+                <Link href={`/surat/${d.id}`}>
+                  <FileText />
+                  {d.status === "approved" ? "Unduh surat" : "Lihat draft"}
+                </Link>
+              </Button>
             ) : (
-              <span>
+              <div className="flex h-12 items-center justify-center gap-2 rounded-[12px] border border-dashed px-5 text-[15px] font-medium text-muted-foreground">
                 <FileText />
-                Lihat draft
-              </span>
+                Belum ada draft
+              </div>
             )}
-          </Button>
-          <Button variant="outline" size="lg" asChild>
-            <Link href="/app">
-              <MessageCircle />
-              Buka chat
-            </Link>
-          </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/app">
+                <MessageCircle />
+                Buka chat
+              </Link>
+            </Button>
+          </div>
+          {cancellable && (
+            <Button variant="destructive-outline" size="lg" disabled={busyAct} onClick={cancel}>
+              <Trash2 />
+              {confirmCancel ? "Ketuk lagi untuk membatalkan" : "Batalkan permintaan"}
+            </Button>
+          )}
         </div>
       }
     >
@@ -273,6 +346,11 @@ export function HistoryDetail({ id }: { id: string }) {
 
         <div className="flex flex-col gap-3.5 rounded-lg border bg-card px-4 pb-1 pt-4">
           <span className="text-sm font-bold">Status</span>
+          {cancelled ? (
+            <p className="pb-4 text-[13px] leading-[19px] text-muted-foreground">
+              Permintaan ini dibatalkan. Antrean staf ikut kosong dan tahan ruang (kalau ada) dilepas. Butuh layanan ini lagi? Mulai dari chat.
+            </p>
+          ) : (
           <ol className="flex flex-col">
             {steps.map((s, i) => {
               const state = i < cur || (i === cur && d.status === "done") ? "done" : i === cur ? "current" : "todo"
@@ -302,6 +380,7 @@ export function HistoryDetail({ id }: { id: string }) {
               )
             })}
           </ol>
+          )}
         </div>
       </div>
     </Frame>

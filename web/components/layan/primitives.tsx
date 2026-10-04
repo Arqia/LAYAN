@@ -25,20 +25,9 @@ export function Wordmark() {
   )
 }
 
-/** Avatar agent: kotak ink + isi #34C3A5. */
+/** Avatar agent: memakai logo LAYAN. */
 export function AgentAvatar({ size = 28 }: { size?: number }) {
-  const big = size > 32
-  return (
-    <span
-      className={cn("grid flex-none place-items-center bg-ink", big ? "rounded-[13px]" : "rounded-[8px]")}
-      style={{ width: size, height: size }}
-    >
-      <span
-        className={cn("bg-[#34C3A5] dark:bg-[#0A7A66]", big ? "rounded-[4px]" : "rounded-[2.5px]")}
-        style={{ width: big ? 14 : 9, height: big ? 14 : 9 }}
-      />
-    </span>
-  )
+  return <Mark size={size} />
 }
 
 export function StatusBadge({ status, className }: { status: Status; className?: string }) {

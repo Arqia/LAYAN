@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import Link from "next/link"
-import { ArrowUp, CalendarClock, ChevronRight, CircleAlert, CircleCheck, History, Paperclip, RefreshCw, ShieldCheck, WifiOff } from "lucide-react"
+import { ArrowDown, ArrowUp, CalendarClock, ChevronRight, CircleAlert, CircleCheck, History, Paperclip, RefreshCw, ShieldCheck, SquarePen, Trash2, WifiOff } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { Check, Worker } from "@/lib/data"
 import { api, stream, type AgentEvent, type ChatMessage } from "@/lib/api"
@@ -133,16 +134,21 @@ function FailedUpload({ file, onRetry, disabled }: { file: File; onRetry: () => 
   )
 }
 
-function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
+function EmptyState() {
   const { me } = useStore()
   return (
-    <div className="flex min-h-full flex-col gap-7 px-5 pb-5 pt-10 lg:mx-auto lg:w-full lg:max-w-[760px]">
-      <div className="flex flex-col gap-2.5">
-        <AgentAvatar size={44} />
-        <h1 className="mt-2 text-[30px] font-bold leading-9 tracking-[-0.02em]">Halo, {me?.name.split(" ")[0] ?? "kamu"}</h1>
-        <p className="text-pretty text-base text-muted-foreground">Mau urus apa hari ini? Ceritakan saja, aku kerjakan sampai selesai.</p>
-      </div>
-      <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col items-center gap-2.5 text-center">
+      <AgentAvatar size={44} />
+      <h1 className="mt-2 text-[30px] font-bold leading-9 tracking-[-0.02em]">Halo, {me?.name.split(" ")[0] ?? "kamu"}</h1>
+      <p className="text-pretty text-base text-muted-foreground">Mau urus apa hari ini? Ceritakan saja, aku kerjakan sampai selesai.</p>
+    </div>
+  )
+}
+
+function Suggestions({ onPick }: { onPick: (prompt: string) => void }) {
+  return (
+    <>
+      <div className="flex w-full flex-col gap-2.5">
         {SHORTCUTS.map((s) => (
           <button
             key={s.title}
@@ -159,11 +165,11 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
           </button>
         ))}
       </div>
-      <div className="mt-auto flex items-center justify-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <ShieldCheck className="size-3.5" />
         Setiap langkah tercatat. Keputusan akhir tetap di staf.
       </div>
-    </div>
+    </>
   )
 }
 
@@ -188,6 +194,98 @@ export function MobileHeader({ bordered, right }: { bordered?: boolean; right?: 
   )
 }
 
+/* ---------- komposer mengambang: di tengah saat kosong, turun ke bawah via FLIP ---------- */
+
+function Composer({
+  boxRef,
+  docked,
+  text,
+  setText,
+  onSend,
+  busy,
+  online,
+  empty,
+  uploadActive,
+}: {
+  boxRef: (el: HTMLDivElement | null) => void
+  docked: boolean
+  text: string
+  setText: (t: string) => void
+  onSend: (t: string) => void
+  busy: boolean
+  online: boolean
+  empty: boolean
+  uploadActive: boolean
+}) {
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // textarea tumbuh mengikuti isi, maks ~6 baris
+  useEffect(() => {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, 148)}px`
+  }, [text])
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSend(text)
+      }}
+      className={docked ? "flex flex-none items-end border-t bg-background px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))] lg:px-[max(12px,calc((100%-760px)/2))]" : "w-full"}
+    >
+      <div
+        ref={boxRef}
+        className="flex w-full flex-col gap-1 rounded-[20px] border bg-card p-2 transition-[border-color,box-shadow] duration-250 focus-within:border-primary focus-within:shadow-[0_0_0_4px_rgba(10,122,102,.08)]"
+      >
+        <textarea
+          ref={taRef}
+          rows={1}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault()
+              onSend(text)
+            }
+          }}
+          disabled={!online}
+          maxLength={2000}
+          aria-label="Pesan"
+          placeholder={!online ? "Menunggu koneksi…" : empty ? "Tulis permintaanmu…" : "Tulis pesan…"}
+          className="max-h-[148px] w-full resize-none bg-transparent px-3 pt-2.5 text-[15px] leading-[22px] outline-none placeholder:text-subtle-foreground disabled:opacity-60"
+        />
+        <div className="flex items-center gap-2 px-1 pb-0.5">
+          {uploadActive && online ? (
+            <label htmlFor={UPLOAD_INPUT_ID} aria-label="Lampirkan file" className="grid size-10 flex-none cursor-pointer place-items-center rounded-full hover:bg-muted">
+              <Paperclip className="size-5" />
+            </label>
+          ) : (
+            <span aria-hidden className="grid size-10 flex-none place-items-center rounded-full opacity-40">
+              <Paperclip className="size-5" />
+            </span>
+          )}
+          <span className="flex-1" />
+          {text.length > 1800 && (
+            <span className={cn("text-xs tabular-nums", text.length >= 2000 ? "font-semibold text-destructive" : "text-muted-foreground")}>
+              {text.length}/2000
+            </span>
+          )}
+          <button
+            type="submit"
+            aria-label="Kirim"
+            disabled={!text.trim() || busy || !online}
+            className="grid size-10 flex-none cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary-hover active:scale-95 disabled:cursor-default disabled:bg-border disabled:text-icon"
+          >
+            <ArrowUp className="size-5" />
+          </button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
 /* ---------- loket chat ---------- */
 
 export function Chat({ initialText = "" }: { initialText?: string }) {
@@ -199,6 +297,36 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
   const [failed, setFailed] = useState<{ file: File; messageId: number } | null>(null)
   const [text, setText] = useState(initialText)
   const scroller = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const setBoxRef = useCallback((el: HTMLDivElement | null) => {
+    boxRef.current = el
+  }, [])
+  const lastEmptyRect = useRef<DOMRect | null>(null)
+  const wasEmpty = useRef<boolean | null>(null)
+
+  // FLIP: komposer meluncur dari tengah ke bawah saat pesan pertama terkirim
+  useLayoutEffect(() => {
+    const nowEmpty = messages !== null && messages.length === 0
+    if (nowEmpty) {
+      const n = boxRef.current
+      if (n) lastEmptyRect.current = n.getBoundingClientRect()
+    } else if (wasEmpty.current === true && messages !== null) {
+      const n = boxRef.current
+      const o = lastEmptyRect.current
+      if (n && o && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const r = n.getBoundingClientRect()
+        const dx = o.left + o.width / 2 - (r.left + r.width / 2)
+        const dy = o.top + o.height / 2 - (r.top + r.height / 2)
+        if (Math.hypot(dx, dy) > 8) {
+          n.animate(
+            [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0px, 0px)" }],
+            { duration: 550, easing: "cubic-bezier(.22,.8,.24,1)" },
+          )
+        }
+      }
+    }
+    wasEmpty.current = nowEmpty
+  })
 
   const load = useCallback(
     () =>
@@ -218,16 +346,63 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
     if (initialText) window.history.replaceState(null, "", window.location.pathname)
   }, [initialText])
 
+  const [confirmNew, setConfirmNew] = useState(false)
+  const [showJump, setShowJump] = useState(false)
+  const stick = useRef(true)
+
   // Keputusan staf masuk sebagai pesan baru. Cek tiap 5 detik saat tab terlihat dan agent diam.
   useEffect(() => {
     if (busy) return
-    const t = setInterval(() => document.visibilityState === "visible" && load(), 5000)
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible") return
+      load()
+    }, 5000)
     return () => clearInterval(t)
   }, [busy, load])
 
+  // Lengket ke bawah hanya kalau pengguna memang sedang di bawah.
+  // Kalau sedang membaca ke atas, tampilkan tombol lompat instead.
+  const onScroll = useCallback(() => {
+    const el = scroller.current
+    if (!el) return
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64
+    setShowJump(!stick.current)
+  }, [])
+
   useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" })
+    if (stick.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" })
   }, [messages?.length, agent, failed])
+
+  // Lengan konfirmasi tombol percakapan baru lepas sendiri setelah 3 detik.
+  useEffect(() => {
+    if (!confirmNew) return
+    const t = setTimeout(() => setConfirmNew(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmNew])
+
+  // Percakapan baru: kosongkan bubble + state agent. Permintaan resmi di
+  // Riwayat dan audit log TIDAK ikut dihapus (aturan di api/src/chat.rs).
+  async function newChat() {
+    if (busy) return
+    if (!confirmNew) {
+      setConfirmNew(true)
+      toast.info("Ketuk lagi untuk mengosongkan percakapan", { description: "Bubble chat hilang. Permintaan di Riwayat tetap ada." })
+      return
+    }
+    setConfirmNew(false)
+    try {
+      await api("/chat", { method: "DELETE" })
+      setMessages([])
+      setAgent(null)
+      setFailed(null)
+      setError("")
+      setText("")
+      setShowJump(false)
+      stick.current = true
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   const onEvent = useCallback((e: AgentEvent) => {
     if (e.type === "status") setAgent(e.label ? { label: e.label, steps: e.steps, step: e.step } : null)
@@ -330,9 +505,24 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
       <MobileHeader
         bordered={!empty || !online}
         right={
-          <Link href="/app/riwayat" aria-label="Riwayat permintaan" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted lg:hidden">
-            <History className="size-[21px]" />
-          </Link>
+          <>
+            <button
+              type="button"
+              onClick={newChat}
+              disabled={!messages?.length || busy}
+              aria-label={confirmNew ? "Ketuk lagi untuk mengosongkan percakapan" : "Percakapan baru"}
+              title={confirmNew ? "Ketuk lagi untuk mengosongkan percakapan" : "Percakapan baru"}
+              className={cn(
+                "grid size-11 place-items-center rounded-[12px] hover:bg-muted disabled:cursor-default disabled:opacity-40",
+                confirmNew && "bg-destructive-soft text-destructive hover:bg-destructive-soft",
+              )}
+            >
+              {confirmNew ? <Trash2 className="size-[21px]" /> : <SquarePen className="size-[21px]" />}
+            </button>
+            <Link href="/app/riwayat" aria-label="Riwayat permintaan" className="grid size-11 place-items-center rounded-[12px] hover:bg-muted lg:hidden">
+              <History className="size-[21px]" />
+            </Link>
+          </>
         }
       />
       {!online && (
@@ -344,34 +534,56 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
         </div>
       )}
 
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-        {messages === null ? (
+      {messages === null ? (
+        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
           <Skeleton />
-        ) : empty ? (
-          <EmptyState onPick={send} />
-        ) : (
+        </div>
+      ) : empty ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-6 lg:mx-auto lg:w-full lg:max-w-[760px]">
+          <EmptyState />
+          <Composer boxRef={setBoxRef} docked={false} text={text} setText={setText} onSend={send} busy={busy} online={online} empty uploadActive={!!uploadActive} />
+          <Suggestions onPick={send} />
+        </div>
+      ) : (
+        <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto" aria-live="polite">
           <div className="flex min-h-full flex-col justify-end gap-3 p-4 lg:mx-auto lg:w-full lg:max-w-[760px]">
             {messages.map((m) =>
               m.sender === "user" ? (
-                m.file ? (
-                  <FileBubble key={m.id} file={m.file} />
-                ) : (
-                  <div key={m.id} className="max-w-[82%] self-end whitespace-pre-wrap rounded-[18px_18px_6px_18px] bg-primary px-3.5 py-2.5 text-[15px] leading-[22px] text-primary-foreground">
-                    {m.text}
-                  </div>
-                )
+                <div key={m.id} className="flex max-w-[82%] flex-col items-end gap-0.5 self-end">
+                  {m.file ? (
+                    <FileBubble file={m.file} />
+                  ) : (
+                    <div className="whitespace-pre-wrap rounded-[18px_18px_6px_18px] bg-primary px-3.5 py-2.5 text-[15px] leading-[22px] text-primary-foreground">
+                      {m.text}
+                    </div>
+                  )}
+                  <span className="pr-1 text-[11px] leading-4 text-subtle-foreground">{m.time}</span>
+                </div>
               ) : (
-                <AgentRow key={m.id}>
-                  {m.text && <AgentBubble>{m.text}</AgentBubble>}
-                  {m.card && renderCard(m)}
-                </AgentRow>
+                <div key={m.id} className="flex flex-col gap-0.5">
+                  <AgentRow>
+                    {m.text && <AgentBubble>{m.text}</AgentBubble>}
+                    {m.card && renderCard(m)}
+                  </AgentRow>
+                  <span className="pl-9 text-[11px] leading-4 text-subtle-foreground">{m.time}</span>
+                </div>
               ),
             )}
             {failed && <FailedUpload file={failed.file} disabled={!online || busy} onRetry={() => upload(failed.messageId, failed.file)} />}
             <Typing agent={agent} />
           </div>
-        )}
-      </div>
+          {showJump && (
+            <button
+              type="button"
+              onClick={() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" })}
+              aria-label="Ke pesan terbaru"
+              className="absolute bottom-4 left-1/2 grid size-10 -translate-x-1/2 cursor-pointer place-items-center rounded-full border bg-card shadow-[0_10px_30px_-12px_rgba(22,24,26,.5)] hover:border-primary active:scale-95"
+            >
+              <ArrowDown className="size-5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="flex flex-none items-start gap-2 border-t bg-destructive-soft/60 px-4 py-2 text-[13px] leading-[18px] text-destructive">
@@ -383,40 +595,9 @@ export function Chat({ initialText = "" }: { initialText?: string }) {
         </div>
       )}
 
-      <form
-        className="flex flex-none items-end gap-2 border-t bg-background px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))] lg:px-[max(12px,calc((100%-760px)/2))]"
-        onSubmit={(e) => {
-          e.preventDefault()
-          send(text)
-        }}
-      >
-        {uploadActive && online ? (
-          <label htmlFor={UPLOAD_INPUT_ID} aria-label="Lampirkan file" className="grid size-11 flex-none cursor-pointer place-items-center rounded-full border border-input bg-card hover:bg-background">
-            <Paperclip className="size-5" />
-          </label>
-        ) : (
-          <span aria-hidden className="grid size-11 flex-none place-items-center rounded-full border border-input bg-card opacity-50">
-            <Paperclip className="size-5" />
-          </span>
-        )}
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={!online}
-          maxLength={2000}
-          aria-label="Pesan"
-          placeholder={!online ? "Menunggu koneksi…" : empty ? "Tulis permintaanmu…" : "Tulis pesan…"}
-          className="h-11 min-w-0 flex-1 rounded-full border border-input bg-card px-4 text-[15px] outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-accent disabled:bg-muted"
-        />
-        <button
-          type="submit"
-          aria-label="Kirim"
-          disabled={!text.trim() || busy || !online}
-          className="grid size-11 flex-none cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary-hover active:scale-95 disabled:cursor-default disabled:bg-border disabled:text-icon"
-        >
-          <ArrowUp className="size-5" />
-        </button>
-      </form>
+      {!empty && (
+        <Composer boxRef={setBoxRef} docked text={text} setText={setText} onSend={send} busy={busy} online={online} empty={false} uploadActive={!!uploadActive} />
+      )}
     </div>
     </div>
   )

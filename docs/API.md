@@ -26,10 +26,12 @@ Error selalu `{ "error": "pesan siap tampil ke pengguna" }` dengan status 4xx/5x
 | GET | `/api/me` | login | `User` = `{id, role, name, email, nim, prodi, unit}`; `role` = `mahasiswa` \| `staf` \| `teknisi` |
 | GET | `/api/chat` | mahasiswa | riwayat pesan: `ChatMessage[]` |
 | POST | `/api/chat` | mahasiswa | body `{text}` (maks 2000 huruf) → **stream SSE** |
-| POST | `/api/chat/action` | mahasiswa | body `{message_id, action, payload}`; `action` = `submit` \| `upload` \| `ticket` → **stream SSE** |
+| DELETE | `/api/chat` | mahasiswa | mulai percakapan baru: hapus bubble + state agent (permintaan di Riwayat dan audit log tetap) → 204 |
+| POST | `/api/chat/action` | mahasiswa | body `{message_id, action, payload}`; `action` = `submit` \| `upload` \| `ticket` \| `resume` (lanjutkan pengajuan tertunda; `message_id` diabaikan, `payload.request_id` wajib) → **stream SSE** |
 | POST | `/api/attachments` | mahasiswa | multipart, satu file PDF/JPG/PNG ≤ 5 MB → `{id, name, size}`. Gambar diklasifikasi LLM (lihat Klasifikasi lampiran) |
 | GET | `/api/attachments/{id}` | pemilik, staf, teknisi | isi file |
 | GET | `/api/requests` | mahasiswa | riwayat permintaan: `[{id, worker, kind, title, status, time, meta, active}]` |
+| POST | `/api/requests/{id}/cancel` | mahasiswa | batalkan permintaan milik sendiri yang belum selesai → `{ok, status}` |
 | GET | `/api/requests/{id}` | mahasiswa | detail: `{id, worker, kind, title, status, fields, steps, letter, letter_no, approved_by, approved_at, reject_reason, student}` |
 | GET | `/api/staff/queue` | staf | antrean: `[{id, worker, tab, type, name, nim, prodi, time, mins, line, summary, checks, attachments, letter, timeline, ...}]` |
 | POST | `/api/staff/requests/{id}/decide` | staf | body `{approve, reason?, answer?}`; `reason` wajib saat menolak, `answer` wajib saat menjawab tiket |
@@ -47,6 +49,7 @@ Peran yang salah dijawab 403. Detail field lengkap: lihat `json!` di `api/src/re
 ## Status permintaan
 
 `submitted` → `processing` → `needs_info` / `pending_approval` → `approved` / `rejected` → `done`
+(`cancelled` = dibatalkan mahasiswa, terminal; `rejected` = ditolak staf)
 (label Indonesia ada di `web/lib/data.ts`, `STATUS_LABEL`).
 
 ## Stream SSE (`POST /api/chat`, `POST /api/chat/action`)
