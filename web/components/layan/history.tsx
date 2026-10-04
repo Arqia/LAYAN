@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { api, post, stream } from "@/lib/api"
+import { ThemeToggle } from "./app-bar"
 import { STATUS_LABEL, type Status, type Worker } from "@/lib/data"
 import { StatusBadge, WorkerTile } from "./primitives"
 
@@ -33,6 +34,7 @@ function Frame({ title, back, children, footer }: { title: string; back: string;
           <ArrowLeft className="size-[22px]" />
         </Link>
         <h1 className="flex-1 text-[17px] font-bold">{title}</h1>
+        <ThemeToggle />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       {footer}

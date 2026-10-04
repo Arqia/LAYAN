@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { HOME } from "@/lib/data"
 import { useStore } from "@/components/layan/store"
 import { Logo, SiteFooter, setLang, useLang, type Lang } from "@/components/layan/site"
+import { ThemeToggle } from "@/components/layan/app-bar"
 import Link from "next/link"
 import { StudentFlows } from "@/components/layan/student-flows"
 
@@ -271,7 +272,7 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
               onMouseEnter={() => pick(i)}
               className={`group flex min-h-12 flex-none cursor-pointer items-center gap-3.5 rounded-[20px] border p-2.5 pr-4 text-left transition-all duration-500 ease-[cubic-bezier(.2,.7,.2,1)] lg:p-3 lg:pr-5 ${on ? "border-primary bg-card shadow-[0_20px_40px_-26px_rgba(10,122,102,.55)] lg:translate-x-2" : "border-transparent hover:bg-card/60"}`}
             >
-              <span aria-hidden className={`flex size-11 shrink-0 items-center justify-center rounded-[14px] transition-all duration-500 ease-[cubic-bezier(.3,1.4,.5,1)] ${on ? "rotate-[-6deg] bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+              <span aria-hidden className={`flex size-11 shrink-0 items-center justify-center rounded-[14px] transition-all duration-500 ease-[cubic-bezier(.3,1.4,.5,1)] group-hover:scale-[1.07] ${on ? "rotate-[-6deg] bg-primary text-primary-foreground" : "bg-muted text-foreground group-hover:rotate-[-6deg]"}`}>
                 <Icon d={ICONS[v.k]} />
               </span>
               <span className="flex min-w-0 flex-col">
@@ -322,14 +323,14 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
               <div className="flex flex-col gap-2">
                 {t.rooms.map(([code, kind, cap], i) => (
                   <div key={code} className={`flex items-center justify-between gap-3 rounded-[16px] border p-3.5 ${MSG_IN}`} style={delay(950 + i * 150)}>
-                    <span className="flex items-center gap-3">
-                      <span className="rounded-lg bg-accent px-2.5 py-1.5 font-mono text-[13px] font-medium text-accent-foreground">{code}</span>
-                      <span className="flex flex-col">
-                        <span className="text-sm font-semibold">{kind}</span>
-                        <span className="text-xs text-muted-foreground">{cap}</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="shrink-0 rounded-lg bg-accent px-2.5 py-1.5 font-mono text-[13px] font-medium text-accent-foreground">{code}</span>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm font-semibold">{kind}</span>
+                        <span className="truncate text-xs text-muted-foreground">{cap}</span>
                       </span>
                     </span>
-                    <button type="button" onClick={gate({ key: "ruang", path: "/app", q: s.q })} className={BTN_ACC}>{t.roomHold}</button>
+                    <button type="button" onClick={gate({ key: "ruang", path: "/app", q: s.q })} className={`${BTN_ACC} shrink-0`}>{t.roomHold}</button>
                   </div>
                 ))}
               </div>
@@ -337,11 +338,11 @@ function ServiceDemo({ t, gate, motion }: { t: Dict; gate: Gate; motion: Motion 
             {s.k === "kerusakan" && (
               <div className="flex flex-col gap-3 rounded-[18px] border p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="flex flex-col">
-                    <span className="text-[15px] font-semibold">{t.reportTitle}</span>
-                    <span className="text-xs text-muted-foreground">{t.reportRoom}</span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-[15px] font-semibold">{t.reportTitle}</span>
+                    <span className="truncate text-xs text-muted-foreground">{t.reportRoom}</span>
                   </span>
-                  <span className="rounded-full bg-warn-bg px-2.5 py-1 text-xs font-medium text-warn">{t.reportUrgency}</span>
+                  <span className="shrink-0 whitespace-nowrap rounded-full bg-warn-bg px-2.5 py-1 text-xs font-medium text-warn">{t.reportUrgency}</span>
                 </div>
                 <span className={`flex items-center gap-2 text-sm text-primary ${MSG_IN}`} style={delay(1150)}><Check />{t.reportStatus}</span>
                 <button type="button" onClick={ask} className={`${BTN_ACC} self-start`}>{t.reportAction}<Arrow size={15} /></button>
@@ -370,6 +371,8 @@ function Story({ t, motion }: { t: Dict; motion: Motion }) {
   const segs = useRef<(HTMLSpanElement | null)[]>([])
   const pos = useRef(motion === "off" ? END : 0) // posisi 0..6 (tahap + progres di dalamnya)
   const rest = useRef(0) // jeda di akhir sebelum mengulang
+  const hold = useRef<number | null>(null) // tahap yang di-hover/diketuk: kejar lalu tahan di ujungnya
+  const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [k, setK] = useState(motion === "off" ? STAGES * SUBS - 1 : 0)
   const stage = Math.floor(k / SUBS), sub = k % SUBS
 
@@ -403,15 +406,20 @@ function Story({ t, motion }: { t: Dict; motion: Motion }) {
       const dt = Math.min(64, now - last)
       last = now
       if (visible) {
+        const h = hold.current
         if (rest.current > 0) {
           rest.current -= dt
           if (rest.current <= 0) pos.current = 0
-        } else {
+        } else if (h === null) {
           pos.current += dt / DUR[Math.min(STAGES - 1, Math.floor(pos.current))]
           if (pos.current >= END) {
             pos.current = END
             rest.current = 2800
           }
+        } else {
+          // hover/ketuk: kejar tahapnya (~0,9 detik per tahap), tahan di ujungnya; mundur = lompat langsung
+          const target = h + 0.999
+          pos.current = pos.current < target ? Math.min(target, pos.current + dt / 900) : target
         }
         paint(pos.current)
       }
@@ -426,6 +434,24 @@ function Story({ t, motion }: { t: Dict; motion: Motion }) {
 
   const tracked = stage === 5 ? sub + 1 : 0 // jumlah tahap status yang sudah centang
 
+  // hover/ketuk tahap: progres mengejar lalu menahan di situ; lepas = auto lanjut lagi
+  const focusStage = (i: number) => {
+    hold.current = i
+    rest.current = 0
+    if (pos.current > i + 0.999) pos.current = i + 0.999 // mundur = lompat langsung
+    paint(pos.current)
+  }
+  const release = () => {
+    hold.current = null
+  }
+  // ketuk (HP): tahan di tahap itu sebentar, lalu lanjut otomatis
+  const tap = (i: number) => {
+    focusStage(i)
+    clearTimeout(tapTimer.current)
+    tapTimer.current = setTimeout(release, 6000)
+  }
+  useEffect(() => () => clearTimeout(tapTimer.current), [])
+
   return (
     <section id="cara-kerja" ref={box} className={`relative flex min-h-dvh flex-col justify-center pt-[max(96px,12vh)] pb-[max(40px,6vh)] ${GUTTER}`}>
       <div className="mx-auto grid w-full max-w-[1376px] items-center gap-x-[clamp(32px,5vw,88px)] gap-y-5 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
@@ -436,15 +462,15 @@ function Story({ t, motion }: { t: Dict; motion: Motion }) {
           </h2>
           <p data-reveal data-delay="120" className={`mt-4 max-w-[440px] ${SUB}`}>{t.storySub}</p>
 
-          {/* alur di layar lebar: satu garis yang terisi mengikuti tahap */}
-          <ol className="relative mt-[clamp(20px,4vh,40px)] hidden list-none flex-col p-0 lg:flex">
+          {/* alur di layar lebar: satu garis yang terisi mengikuti tahap; hover = progres mengejar */}
+          <ol className="relative mt-[clamp(20px,4vh,40px)] hidden list-none flex-col p-0 lg:flex" onMouseLeave={release}>
             <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-0.5 bg-border" />
             <span ref={line} aria-hidden className="absolute bottom-3 left-[11px] top-3 w-0.5 origin-top bg-primary" style={{ transform: "scaleY(0)" }} />
             {t.steps.map(([label, desc], i) => {
               const done = i < stage, on = i === stage
               return (
                 <li key={label} aria-current={on ? "step" : undefined} className="relative">
-                  <div className="flex w-full gap-4 py-[clamp(4px,1vh,9px)]">
+                  <button type="button" onMouseEnter={() => focusStage(i)} onFocus={() => focusStage(i)} onBlur={release} onClick={() => focusStage(i)} className="group flex w-full cursor-pointer gap-4 py-[clamp(4px,1vh,9px)] text-left transition-transform duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:translate-x-1">
                     <span className={`relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-500 ${done ? "border-primary bg-primary text-primary-foreground" : on ? "scale-110 border-primary bg-background" : "border-border bg-background"}`}>
                       {done && <Check size={12} />}
                       {on && <span className="size-2 rounded-full bg-primary animate-[layanPulse_2.4s_infinite]" />}
@@ -455,21 +481,21 @@ function Story({ t, motion }: { t: Dict; motion: Motion }) {
                         <span className="overflow-hidden text-[14.5px] leading-normal text-muted-foreground">{desc}</span>
                       </span>
                     </span>
-                  </div>
+                  </button>
                 </li>
               )
             })}
           </ol>
 
-          {/* alur di HP: 6 segmen progres + tahap aktif */}
+          {/* alur di HP: 6 segmen progres yang bisa diketuk + tahap aktif */}
           <div className="mt-4 flex flex-col gap-2.5 lg:hidden">
             <div className="grid grid-cols-6 gap-1.5">
               {t.steps.map(([label], i) => (
-                <span key={label} aria-hidden className="flex h-6 items-center">
+                <button key={label} type="button" onClick={() => tap(i)} aria-label={label} aria-current={i === stage ? "step" : undefined} className="flex h-6 cursor-pointer items-center">
                   <span className="relative h-1 w-full overflow-hidden rounded-full bg-border">
                     <span ref={(n) => { segs.current[i] = n }} className="absolute inset-0 origin-left bg-primary" style={{ transform: "scaleX(0)" }} />
                   </span>
-                </span>
+                </button>
               ))}
             </div>
             <span key={stage} className={`flex items-baseline gap-2 ${MSG_IN}`}>
@@ -776,6 +802,7 @@ export function Landing() {
               {t.motionLabel}
               <SwitchTrack on={motion === "on"} />
             </button>
+            <ThemeToggle />
             <div role="group" aria-label={t.langLabel} className="flex rounded-full border bg-card/60 p-1">
               {(["id", "en"] as const).map((l) => (
                 <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l} className={`h-9 min-w-11 cursor-pointer rounded-full px-3 font-mono text-xs font-medium uppercase tracking-[.06em] transition-colors duration-300 ${lang === l ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground"}`}>

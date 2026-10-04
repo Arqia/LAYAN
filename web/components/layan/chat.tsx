@@ -11,7 +11,7 @@ import {
   AnswerCard, BookingHeldCard, ChecksCard, CollapsedCard, DraftCard, FormCard, LetterDoneCard, ReportCard, RoomsCard, TicketCard,
   UPLOAD_INPUT_ID, UploadCard, type Answer, type Held, type LetterDone, type ReportData, type RoomsData, type Ticket, type FormField,
 } from "./action-cards"
-import { AccountPill } from "./app-bar"
+import { AccountPill, ThemeToggle } from "./app-bar"
 import { HistorySidebar } from "./history"
 import { AgentAvatar, FileTypeTile, Mark, TypingDots, WorkerTile, formatSize } from "./primitives"
 import { useStore } from "./store"
@@ -189,6 +189,7 @@ export function MobileHeader({ bordered, right }: { bordered?: boolean; right?: 
       <Mark />
       <span className="flex-1 text-[17px] font-extrabold tracking-[0.06em]">LAYAN</span>
       <AccountPill />
+      <ThemeToggle />
       {right}
     </header>
   )

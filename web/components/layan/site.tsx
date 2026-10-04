@@ -3,6 +3,7 @@
 import { useSyncExternalStore, type ReactNode } from "react"
 import Link from "next/link"
 import { HOME } from "@/lib/data"
+import { ThemeToggle } from "@/components/layan/app-bar"
 import { useStore } from "@/components/layan/store"
 
 // Bagian bersama landing (/) dan halaman publik lain (/faq, /unduh, /status, /keamanan, /untuk-staf):
@@ -141,6 +142,7 @@ export function SitePage({ lang, kicker, title, sub, children }: { lang: Lang; k
             {links.map(([label, href]) => <NavLink key={href} href={href} label={label} />)}
           </nav>
           <div className="flex items-center gap-2.5">
+            <ThemeToggle />
             <LangSwitch lang={lang} label={s.lang} />
             <Link href={me ? HOME[me.role] : "/login"} className={`${BTN_DARK} h-11 px-5 text-[14.5px]`}>{me ? s.open : s.signin}</Link>
           </div>
