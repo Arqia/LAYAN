@@ -38,8 +38,8 @@ pub struct AppState {
     info(title = "LAYAN API", version = "0.3.0"),
     paths(
         health, auth::login, auth::logout, auth::me,
-        chat::list, chat::send, chat::action, chat::upload,
-        requests::mine, requests::detail, requests::queue, requests::decide, requests::undo, requests::metrics,
+        chat::list, chat::send, chat::reset, chat::action, chat::upload,
+        requests::mine, requests::detail, requests::cancel, requests::queue, requests::decide, requests::undo, requests::metrics,
         board::list, board::set_status,
         app_update::latest, app_update::apk, admin::overview,
     ),
@@ -93,12 +93,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/me", get(auth::me))
-        .route("/api/chat", get(chat::list).post(chat::send))
+        .route("/api/chat", get(chat::list).post(chat::send).delete(chat::reset))
         .route("/api/chat/action", post(chat::action))
         .route("/api/attachments", post(chat::upload).layer(DefaultBodyLimit::max(6 * 1024 * 1024)))
         .route("/api/attachments/{id}", get(chat::download))
         .route("/api/requests", get(requests::mine))
         .route("/api/requests/{id}", get(requests::detail))
+        .route("/api/requests/{id}/cancel", post(requests::cancel))
         .route("/api/staff/queue", get(requests::queue))
         .route("/api/staff/requests/{id}/decide", post(requests::decide))
         .route("/api/staff/requests/{id}/undo", post(requests::undo))

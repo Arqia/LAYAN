@@ -33,7 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const me = jar.has("layan_session") ? await fetchMe(jar.toString()).catch(() => null) : null
   return (
     <html lang="id" suppressHydrationWarning className={`${jakarta.variable} ${jetbrains.variable} h-full`}>
-      <body className="min-h-full">
+      <body className="min-h-full" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           <StoreProvider me={me}>{children}</StoreProvider>
           <Toaster position="bottom-right" offset={24} />

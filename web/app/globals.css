@@ -45,6 +45,7 @@
   --status-approved: #18793C;         --status-approved-bg: #E2F3E7;         --status-approved-dot: #2E9B55;
   --status-rejected: #B3261E;         --status-rejected-bg: #FCE7E5;         --status-rejected-dot: #D6453B;
   --status-done: #FFFFFF;             --status-done-bg: #16181A;             --status-done-dot: #34C3A5;
+  --status-cancelled: #6B7076;        --status-cancelled-bg: #ECECE8;        --status-cancelled-dot: #B0B5BA;
 
   /* worker: fg / bg */
   --worker-surat: #0A7A66;     --worker-surat-bg: #E2F2EE;
@@ -93,6 +94,7 @@
   --status-approved: #6FD68F;         --status-approved-bg: #10321C;         --status-approved-dot: #6FD68F;
   --status-rejected: #FF9A91;         --status-rejected-bg: #3F1714;         --status-rejected-dot: #FF8A80;
   --status-done: #0D0F10;             --status-done-bg: #ECEEEF;             --status-done-dot: #0A7A66;
+  --status-cancelled: #8E9499;        --status-cancelled-bg: #1E2224;        --status-cancelled-dot: #6E747A;
 
   --worker-surat: #34C3A5;     --worker-surat-bg: #10352E;
   --worker-helpdesk: #E08BDD;  --worker-helpdesk-bg: #351A34;

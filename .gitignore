@@ -1,3 +1,8 @@
 # aturan per proyek ada di web/.gitignore dan api/.gitignore
 # dokumen hackathon dari panitia, bukan bagian repo
 PENS Hackathon*.pdf
+# launcher dev lokal Windows (mesin masing-masing)
+start-dev.cmd
+# berkas kredensial lokal, jangan commit
+login_info.txt
+login-info.txt

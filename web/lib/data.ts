@@ -8,6 +8,7 @@ export type Status =
   | "approved"
   | "rejected"
   | "done"
+  | "cancelled"
 
 export const STATUS_LABEL: Record<Status, string> = {
   submitted: "Diajukan",
@@ -17,6 +18,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   approved: "Disetujui",
   rejected: "Ditolak",
   done: "Selesai",
+  cancelled: "Dibatalkan",
 }
 
 export type Worker = "surat" | "helpdesk" | "fasilitas"

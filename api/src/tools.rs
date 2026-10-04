@@ -409,14 +409,16 @@ pub fn letter_fields(d: &Value) -> Vec<[String; 2]> {
 
 pub(crate) async fn create_request(cx: &mut Cx<'_>, prefix: &str, worker: &str, title: &str, status: &str, data: Value) -> anyhow::Result<String> {
     let db = &cx.s.db;
-    let (year, n): (String, i64) = sqlx::query_as(
-        "SELECT strftime('%Y', 'now', '+7 hours'), (SELECT COUNT(*) FROM requests WHERE id LIKE ?1)",
+    let base = if prefix == "TKT" { 318 } else { 931 };
+    // Nomor urut = maks yang pernah ada + 1 (bukan COUNT): baris yang dibatalkan/
+    // dihapus tidak membuat nomor dipakai ulang sehingga INSERT tidak tabrakan.
+    let (year, top): (String, Option<i64>) = sqlx::query_as(
+        "SELECT strftime('%Y', 'now', '+7 hours'), (SELECT MAX(CAST(SUBSTR(id, -4) AS INTEGER)) FROM requests WHERE id LIKE ?1)",
     )
     .bind(format!("{prefix}-%"))
     .fetch_one(db)
     .await?;
-    let base = if prefix == "TKT" { 318 } else { 931 };
-    let id = format!("{prefix}-{year}-{:04}", base + n);
+    let id = format!("{prefix}-{year}-{:04}", top.unwrap_or(base - 1) + 1);
     sqlx::query("INSERT INTO requests (id, student_id, worker, title, status, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
         .bind(&id).bind(&cx.me.id).bind(worker).bind(title).bind(status).bind(data.to_string())
         .execute(db)
@@ -696,6 +698,91 @@ pub async fn resume(cx: &mut Cx<'_>, p: &Pending, action: &str, payload: &Value)
         ("findRooms", "pick") => fasilitas::pick(cx, payload).await,
         _ => Err(Nope("Aksi ini tidak cocok dengan card yang aktif.".into()).into()),
     }
+}
+
+/// Lanjutkan pengajuan yang tertunda setelah percakapan dikosongkan.
+/// Menerbitkan ulang kartu yang tepat dari data tersimpan (tanpa buat request baru),
+/// supaya submit/upload berikutnya jalan lewat jalur normal. Di luar surat,
+/// hanya menjelaskan status + arahan karena langkahnya butuh konteks baru.
+pub(crate) async fn resume_request(cx: &mut Cx<'_>, request_id: &str) -> anyhow::Result<()> {
+    let db = cx.s.db.clone();
+    let row: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT worker, title, status, data FROM requests WHERE id = ?1 AND student_id = ?2",
+    )
+    .bind(request_id)
+    .bind(&cx.me.id)
+    .fetch_optional(&db)
+    .await?;
+    let (worker, title, status, data) = row.ok_or_else(|| Nope("Pengajuan tidak ditemukan.".into()))?;
+    if !matches!(status.as_str(), "needs_info" | "submitted" | "processing") {
+        return Err(Nope("Pengajuan ini sudah selesai atau menunggu staf, tidak bisa dilanjutkan.".into()).into());
+    }
+    let d: Value = serde_json::from_str(&data)?;
+    cx.th.request_id = Some(request_id.to_owned());
+    cx.th.transcript.push(json!({ "role": "user", "content": "[aksi] Mahasiswa menekan \"Lanjutkan di chat\"." }));
+    // Jejak tool call sintetis supaya alur lanjutan (mock maupun LLM) membaca
+    // langkah yang sama seperti kartu aslinya.
+    let fake_call = |tool: &str| {
+        json!({ "role": "assistant", "content": null,
+            "tool_calls": [{ "id": "resume", "type": "function",
+                "function": { "name": tool, "arguments": "{}" } }] })
+    };
+
+    if worker == "surat" {
+        let l = letter_of(&d);
+        if d.get("fields").is_none() {
+            // Form belum pernah diisi: kartu form lagi dengan data tersimpan.
+            let fields: Vec<Value> = l
+                .fields
+                .iter()
+                .map(|(k, label, ph, help)| json!({ "key": k, "label": label, "placeholder": ph, "helper": help }))
+                .collect();
+            cx.th.transcript.push(fake_call("requestLetterDetails"));
+            let id = cx
+                .say(
+                    Some(&format!("Siap, kita lanjutkan {title}. Tinggal lengkapi datanya:")),
+                    Some(card("form", json!({ "title": l.title, "fields": fields }))),
+                )
+                .await?;
+            cx.audit("resumeRequest", &format!("Lanjutkan {title}: minta data")).await?;
+            cx.th.pending = Some(Pending { call_id: "resume".into(), tool: "requestLetterDetails".into(), message_id: id });
+            return Ok(());
+        }
+        if l.attachment.is_some() {
+            let file: Option<String> =
+                sqlx::query_scalar("SELECT name FROM attachments WHERE request_id = ?1 LIMIT 1").bind(request_id).fetch_optional(&db).await?;
+            if file.is_none() {
+                let what = l.attachment.unwrap_or("lampiran");
+                cx.th.transcript.push(fake_call("requestAttachment"));
+                let id = cx
+                    .say(
+                        Some(&format!("Siap, kita lanjutkan {title}. Datanya sudah lengkap, tinggal upload {what}.")),
+                        Some(card("upload", json!({ "title": l.attachment }))),
+                    )
+                    .await?;
+                cx.audit("resumeRequest", &format!("Lanjutkan {title}: minta lampiran")).await?;
+                cx.th.pending = Some(Pending { call_id: "resume".into(), tool: "requestAttachment".into(), message_id: id });
+                return Ok(());
+            }
+        }
+        // Data lengkap: cek ulang syarat (kartu checks diterbitkan oleh tool ini).
+        cx.audit("resumeRequest", &format!("Lanjutkan {title}: cek ulang syarat")).await?;
+        cx.th.transcript.push(fake_call("checkLetterRequirements"));
+        let out = exec(cx, "checkLetterRequirements", &json!({})).await?;
+        if let Outcome::Done(v) = out {
+            cx.th.transcript.push(json!({ "role": "tool", "tool_call_id": "resume", "content": v.to_string() }));
+        }
+        return Ok(());
+    }
+
+    let note = match crate::requests::kind(&worker, &d) {
+        "booking" => format!("{title} masih menunggu pilihan ruang. Pilih lagi lewat chat untuk booking ulang."),
+        "laporan" => format!("{title} sudah diteruskan ke teknisi dan tidak perlu dilanjutkan."),
+        _ => format!("{title} menunggu jawaban unit terkait. Kamu akan dikabari lewat chat."),
+    };
+    cx.say(Some(&note), None).await?;
+    cx.audit("resumeRequest", &format!("Lanjutkan {title}: tanpa kartu")).await?;
+    Ok(())
 }
 
 #[cfg(test)]
