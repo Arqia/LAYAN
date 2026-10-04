@@ -1,12 +1,14 @@
 "use client"
 
 import { memo, useEffect, useRef, useState, type ReactNode } from "react"
+import Link from "next/link"
 import { CheckIcon, Logo, type Lang } from "@/components/layan/site"
 
 // Section setelah hero: dua hal yang bisa dilakukan mahasiswa, masing-masing ke orang yang berbeda.
 //  - Minta layanan  -> Staf    (surat akademik, booking ruang, tiket akademik), contohnya berganti tiap putaran
 //  - Lapor fasilitas -> Teknisi (laporan kerusakan, dari chat langsung ke board)
-// Kedua kartu bergerak bergantian. Tanpa kamera/zoom: ukuran teks tetap. Tidak bisa diklik.
+// Kedua kartu bergantian otomatis sampai pengguna memilih: hover/klik chip atau kartu
+// mengunci pilihan itu dan memainkan animasinya (tidak bergantian lagi).
 // Contoh mengikuti layanan yang benar-benar ada di API (LETTERS di api/src/tools.rs, fasilitas.rs).
 
 type MintaEx = { chip: number; q: string; checks: string[]; ticket: string; title: string; meta: string; action: string; decided: string; done: string }
@@ -22,7 +24,7 @@ const T = {
     minta: "Minta layanan", lapor: "Lapor fasilitas",
     mintaChips: ["Surat akademik", "Booking ruang", "Tiket akademik"],
     laporChips: ["Proyektor", "AC", "Jaringan"],
-    chat: "Chat LAYAN", placeholder: "Tulis kebutuhanmu…",
+    chat: "Chat LAYAN", placeholder: "Tulis kebutuhanmu…", openChat: "Buka chat LAYAN — masuk untuk mulai",
     console: "Staff Console", queue: "Antrean", others: [["Booking ruang F3.1", "menunggu"], ["Tiket akademik", "menunggu"]], reject: "Tolak",
     board: "Board Teknisi", cols: ["Baru", "Dikerjakan", "Selesai"], oldCard: ["Wastafel mampet", "G2-WC"],
     logged: "Laporan dicatat", fixedLabel: "Selesai",
@@ -48,7 +50,7 @@ const T = {
     minta: "Request a service", lapor: "Report a facility",
     mintaChips: ["Academic letters", "Room booking", "Academic ticket"],
     laporChips: ["Projector", "AC", "Network"],
-    chat: "LAYAN chat", placeholder: "Describe what you need…",
+    chat: "LAYAN chat", placeholder: "Describe what you need…", openChat: "Open LAYAN chat — sign in to start",
     console: "Staff Console", queue: "Queue", others: [["Room booking F3.1", "waiting"], ["Academic ticket", "waiting"]], reject: "Reject",
     board: "Technician Board", cols: ["New", "In progress", "Done"], oldCard: ["Clogged sink", "G2-WC"],
     logged: "Report logged", fixedLabel: "Done",
@@ -83,6 +85,7 @@ export const StudentFlows = memo(function StudentFlows({ lang, motion }: { lang:
   // turn 0 = kartu Minta jalan, 1 = kartu Lapor jalan; ia/ib = contoh yang sedang dipakai tiap kartu
   // ib mulai dari contoh terakhir: giliran pertama kartu Lapor memajukannya ke contoh 0
   const [s, setS] = useState({ turn: 0, step: 0, ia: 0, ib: T.id.lapor_ex.length - 1 })
+  const [manual, setManual] = useState(false)
   const [visible, setVisible] = useState(false)
   const box = useRef<HTMLElement>(null)
 
@@ -97,6 +100,8 @@ export const StudentFlows = memo(function StudentFlows({ lang, motion }: { lang:
   useEffect(() => {
     if (off || !visible) return
     const steps = s.turn === 0 ? MINTA_STEPS : LAPOR_STEPS
+    // pilihan manual: mainkan contohnya sekali, lalu tahan di akhir (tidak bergantian lagi)
+    if (manual && s.step + 1 >= steps.length) return
     const id = setTimeout(() => {
       setS((p) => {
         if (p.step + 1 < steps.length) return { ...p, step: p.step + 1 }
@@ -107,7 +112,26 @@ export const StudentFlows = memo(function StudentFlows({ lang, motion }: { lang:
       })
     }, steps[s.step][1])
     return () => clearTimeout(id)
-  }, [s, visible, off])
+  }, [s, visible, off, manual])
+
+  // klik/hover chip: kunci ke contoh pertama chip itu dan mainkan dari awal
+  const pickMinta = (chip: number) => {
+    const idx = t.minta_ex.findIndex((e) => e.chip === chip)
+    if (idx < 0) return
+    setManual(true)
+    setS((p) => ({ turn: 0, step: 0, ia: idx, ib: p.ib }))
+  }
+  const pickLapor = (chip: number) => {
+    const idx = t.lapor_ex.findIndex((e) => e.chip === chip)
+    if (idx < 0) return
+    setManual(true)
+    setS((p) => ({ turn: 1, step: 0, ia: p.ia, ib: idx }))
+  }
+  // hover kartu: kunci ke kartu itu (lanjut dari posisi jalan kalau sudah gilirannya)
+  const focusTurn = (turn: 0 | 1) => {
+    setManual(true)
+    setS((p) => (p.turn === turn ? p : { ...p, turn, step: 0 }))
+  }
 
   const mintaStep: Step = off || s.turn !== 0 ? "done" : MINTA_STEPS[s.step][0]
   const laporStep: Step = off || s.turn !== 1 ? "done" : LAPOR_STEPS[s.step][0]
@@ -124,9 +148,9 @@ export const StudentFlows = memo(function StudentFlows({ lang, motion }: { lang:
         </div>
         <p className="sr-only">{t.sr}</p>
 
-        <div aria-hidden className="pointer-events-none mt-[clamp(28px,5vh,48px)] grid select-none gap-5 lg:grid-cols-2">
-          <MintaCard t={t} ex={t.minta_ex[s.ia]} step={mintaStep} idle={!off && s.turn !== 0} />
-          <LaporCard t={t} ex={t.lapor_ex[s.ib]} step={laporStep} idle={!off && s.turn !== 1} />
+        <div className="mt-[clamp(28px,5vh,48px)] grid select-none gap-5 lg:grid-cols-2">
+          <MintaCard t={t} ex={t.minta_ex[s.ia]} step={mintaStep} idle={!off && s.turn !== 0} onEnter={() => focusTurn(0)} onChip={pickMinta} />
+          <LaporCard t={t} ex={t.lapor_ex[s.ib]} step={laporStep} idle={!off && s.turn !== 1} onEnter={() => focusTurn(1)} onChip={pickLapor} />
         </div>
       </div>
     </section>
@@ -135,32 +159,45 @@ export const StudentFlows = memo(function StudentFlows({ lang, motion }: { lang:
 
 /* ---------- kerangka kartu: kepala, chip, rel, layar ---------- */
 
-function Shell({ title, dest, chips, chip, idle, step, ticket, back, student, destScreen }: {
+function Shell({ title, dest, chips, chip, idle, step, ticket, back, student, destScreen, onEnter, onChip, openChat }: {
   title: string; dest: string; chips: string[]; chip: number; idle: boolean; step: Step; ticket: string; back: string
-  student: ReactNode; destScreen: ReactNode
+  student: ReactNode; destScreen: ReactNode; onEnter: () => void; onChip: (i: number) => void; openChat: string
 }) {
   const out = DEST_STEPS.includes(step) || step === "go" // tiket sudah/sedang di tujuan
   const atDest = DEST_STEPS.includes(step)
   const label = step === "back" || step === "done" ? back : ticket
   return (
-    <div className={`flex flex-col overflow-hidden rounded-[28px] border bg-card shadow-[0_40px_90px_-60px_rgba(22,24,26,.4)] transition-opacity duration-700 ${idle ? "opacity-60" : "opacity-100"}`}>
+    <div onMouseEnter={onEnter} className={`flex flex-col overflow-hidden rounded-[28px] border bg-card shadow-[0_40px_90px_-60px_rgba(22,24,26,.4)] transition-opacity duration-700 ${idle ? "opacity-60" : "opacity-100"}`}>
       <div className="flex items-center justify-between gap-3 px-6 pt-5">
-        <span className="text-[17px] font-semibold tracking-[-.01em]">{title}</span>
-        <span className="rounded-full bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-foreground">→ {dest}</span>
+        <span className="truncate text-[17px] font-semibold tracking-[-.01em]">{title}</span>
+        <span className="shrink-0 whitespace-nowrap rounded-full bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-foreground">→ {dest}</span>
       </div>
       <div className="flex flex-wrap gap-1.5 px-6 pt-3">
         {chips.map((c, i) => (
-          <span key={c} className={`rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors duration-500 ${i === chip ? "border-primary bg-accent text-accent-foreground" : "text-muted-foreground"}`}>{c}</span>
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChip(i)}
+            aria-pressed={i === chip}
+            className={`min-w-0 cursor-pointer truncate rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors duration-500 ${i === chip ? "border-primary bg-accent text-accent-foreground" : "text-muted-foreground hover:border-primary hover:text-foreground"}`}
+          >
+            {c}
+          </button>
         ))}
       </div>
 
       {/* rel 2 stasiun; tiket bergeser dengan transform saja */}
       <Rail out={out} label={label} active={!idle && step !== "done"} />
 
-      {/* satu layar: chat mahasiswa <-> layar tujuan, berganti dengan crossfade */}
+      {/* satu layar: chat mahasiswa (bisa ditekan -> login) <-> layar tujuan, berganti dengan crossfade */}
       <div className="relative mx-4 mb-4 h-[264px] overflow-hidden rounded-[20px] border bg-background">
-        <div className={`absolute inset-0 transition-[opacity,transform] duration-500 ${EASE} ${atDest ? "pointer-events-none -translate-x-3 opacity-0" : "opacity-100"}`}>{student}</div>
-        <div className={`absolute inset-0 transition-[opacity,transform] duration-500 ${EASE} ${atDest ? "opacity-100" : "translate-x-3 opacity-0"}`}>{destScreen}</div>
+        <div className={`absolute inset-0 transition-[opacity,transform] duration-500 ${EASE} ${atDest ? "pointer-events-none -translate-x-3 opacity-0" : "opacity-100"}`}>
+          {student}
+          {!atDest && (
+            <Link href="/login" aria-label={openChat} className="absolute inset-0 z-10 cursor-pointer rounded-[20px] transition-colors duration-300 hover:bg-primary/[.05] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary" />
+          )}
+        </div>
+        <div aria-hidden className={`absolute inset-0 transition-[opacity,transform] duration-500 ${EASE} ${atDest ? "opacity-100" : "translate-x-3 opacity-0"}`}>{destScreen}</div>
       </div>
     </div>
   )
@@ -168,17 +205,16 @@ function Shell({ title, dest, chips, chip, idle, step, ticket, back, student, de
 
 function Rail({ out, label, active }: { out: boolean; label: string; active: boolean }) {
   return (
-    <div className="relative mx-6 mb-4 mt-5 h-12">
-      <div className="absolute inset-x-[7px] top-[30px] h-0.5 rounded-full bg-border" />
-      <div className={`absolute inset-x-[7px] top-[30px] h-0.5 origin-left rounded-full bg-primary transition-transform duration-1000 ${EASE}`} style={{ transform: `scaleX(${out ? 1 : 0})` }} />
-      <span className={`absolute left-0 top-[24px] size-3.5 rounded-full border-2 border-primary bg-primary`} />
-      <span className={`absolute right-0 top-[24px] size-3.5 rounded-full border-2 transition-colors duration-500 ${out ? "border-primary bg-primary" : "border-border bg-card"}`} />
-      {/* tiket lebar tetap; pembungkus selebar (rel - tiket) digeser 100% = tiket tiba di ujung kanan */}
-      <div className={`absolute left-0 top-0 h-6 w-[calc(100%-164px)] transition-transform duration-1000 ${EASE}`} style={{ transform: `translateX(${out ? 100 : 0}%)` }}>
-        <div className="absolute left-0 top-0 w-[164px]">
-          <span className={`flex h-6 w-full items-center justify-center truncate rounded-full px-3 text-[12px] font-semibold transition-colors duration-300 ${active ? "bg-ink text-ink-foreground" : "bg-muted text-muted-foreground"}`}>{label}</span>
-        </div>
+    <div aria-hidden className="relative mx-6 mb-4 mt-5 h-[56px]">
+      {/* pil mengikuti lebar teksnya; spacer flex-grow menggesernya ke kanan */}
+      <div className="absolute inset-x-0 top-0 flex h-6">
+        <span className={`transition-[flex-grow] duration-1000 ${EASE}`} style={{ flexGrow: out ? 1 : 0, flexBasis: 0, minWidth: 0 }} />
+        <span className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[12px] font-semibold transition-colors duration-300 ${active ? "bg-ink text-ink-foreground" : "bg-muted text-muted-foreground"}`}>{label}</span>
       </div>
+      <div className="absolute inset-x-[7px] top-[34px] h-0.5 rounded-full bg-border" />
+      <div className={`absolute inset-x-[7px] top-[34px] h-0.5 origin-left rounded-full bg-primary transition-transform duration-1000 ${EASE}`} style={{ transform: `scaleX(${out ? 1 : 0})` }} />
+      <span className={`absolute left-0 top-[28px] size-3.5 rounded-full border-2 border-primary bg-primary`} />
+      <span className={`absolute right-0 top-[28px] size-3.5 rounded-full border-2 transition-colors duration-500 ${out ? "border-primary bg-primary" : "border-border bg-card"}`} />
     </div>
   )
 }
@@ -233,12 +269,12 @@ function useTyping(step: Step, text: string, ms: number) {
 
 /* ---------- kartu 1: minta layanan -> staf ---------- */
 
-function MintaCard({ t, ex, step, idle }: { t: Dict; ex: MintaEx; step: Step; idle: boolean }) {
+function MintaCard({ t, ex, step, idle, onEnter, onChip }: { t: Dict; ex: MintaEx; step: Step; idle: boolean; onEnter: () => void; onChip: (i: number) => void }) {
   const typed = useTyping(step, ex.q, MINTA_STEPS[0][1])
   const decided = step === "decided" || step === "back" || step === "done"
   return (
     <Shell
-      title={t.minta} dest={t.staff} chips={t.mintaChips} chip={ex.chip} idle={idle} step={step} ticket={ex.ticket} back={ex.decided}
+      title={t.minta} dest={t.staff} chips={t.mintaChips} chip={ex.chip} idle={idle} step={step} ticket={ex.ticket} back={ex.decided} onEnter={onEnter} onChip={onChip} openChat={t.openChat}
       student={
         <Chat t={t} step={step} q={ex.q} typedRef={typed} done={ex.done}>
           <Bubble>
@@ -289,12 +325,12 @@ function MintaCard({ t, ex, step, idle }: { t: Dict; ex: MintaEx; step: Step; id
 
 /* ---------- kartu 2: lapor fasilitas -> teknisi ---------- */
 
-function LaporCard({ t, ex, step, idle }: { t: Dict; ex: LaporEx; step: Step; idle: boolean }) {
+function LaporCard({ t, ex, step, idle, onEnter, onChip }: { t: Dict; ex: LaporEx; step: Step; idle: boolean; onEnter: () => void; onChip: (i: number) => void }) {
   const typed = useTyping(step, ex.q, LAPOR_STEPS[0][1])
   const col = step === "doing" ? 1 : step === "fixed" || step === "back" || step === "done" ? 2 : 0
   return (
     <Shell
-      title={t.lapor} dest={t.tech} chips={t.laporChips} chip={ex.chip} idle={idle} step={step} ticket={`${ex.card} · ${ex.room}`} back={t.fixedLabel}
+      title={t.lapor} dest={t.tech} chips={t.laporChips} chip={ex.chip} idle={idle} step={step} ticket={`${ex.card} · ${ex.room}`} back={t.fixedLabel} onEnter={onEnter} onChip={onChip} openChat={t.openChat}
       student={
         <Chat t={t} step={step} q={ex.q} typedRef={typed} done={ex.done}>
           <Bubble>

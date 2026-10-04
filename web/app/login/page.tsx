@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { CircleAlert, ShieldCheck } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, CircleAlert, ShieldCheck } from "lucide-react"
 import { Field } from "@/components/layan/action-cards"
 import { Wordmark } from "@/components/layan/primitives"
 import { Button } from "@/components/ui/button"
@@ -40,6 +41,10 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-[400px] flex-col justify-center gap-8 px-5 py-10">
+      <Link href="/" className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
+        <ArrowLeft className="size-4" />
+        Beranda
+      </Link>
       <div className="flex flex-col gap-3">
         <Wordmark />
         <h1 className="mt-4 text-[30px] font-bold leading-9 tracking-[-0.02em]">Masuk</h1>
