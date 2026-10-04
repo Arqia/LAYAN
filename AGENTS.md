@@ -8,7 +8,7 @@ staf memutuskan (`/staf`), teknisi mengerjakan laporan kerusakan (`/teknisi`). R
 
 ## 1. Baca dulu sebelum menulis kode
 
-1. `docs/tugas/<nama>.md`: tugasmu, batas file yang boleh diubah, dan kriteria selesai.
+1. Issue GitHub yang sedang dikerjakan (label `arqia` atau `boas`): tugas, wilayah file, dan kriteria selesai. Kerjakan satu issue per PR.
 2. `CONTRIBUTING.md`: alur branch/PR dan pemilik folder.
 3. `docs/API.md`: satu-satunya sumber endpoint dan bentuk data.
 4. `web/app/globals.css`: semua design token. Contoh komponen yang sudah jadi: halaman `/design-system`.
@@ -36,10 +36,10 @@ staf memutuskan (`/staf`), teknisi mengerjakan laporan kerusakan (`/teknisi`). R
 
 ## 3. Batas wilayah
 
-- Ubah **hanya** file yang tercantum di `docs/tugas/<nama>.md`. Perlu menyentuh file lain? Jelaskan alasannya di PR, dan ubah sekecil mungkin.
+- Ubah **hanya** file yang tercantum di bagian "Wilayah file" issue yang dikerjakan. Perlu menyentuh file lain? Jelaskan alasannya di PR, dan ubah sekecil mungkin.
 - Jangan pernah mengubah `api/`, `android/`, `deploy/`, `docs/API.md`, `.gitignore`, atau file milik orang lain.
 - File bersama (`globals.css`, `primitives.tsx`, `app-bar.tsx`, `lib/api.ts`, `lib/data.ts`, `app/layout.tsx`, `proxy.ts`) hanya boleh
-  diubah kalau tugasmu menyebutnya secara eksplisit.
+  diubah kalau issue-nya menyebutnya secara eksplisit.
 
 ## 4. Design system (wajib, tanpa pengecualian)
 
@@ -98,7 +98,7 @@ dan CSS variable baru. Butuh warna baru? Minta Arva menambah token.
 
 ## 6. Commit dan PR
 
-- Branch dari `main` milikmu (di fork), PR ke `arvamadax/LAYAN` `main`.
+- Branch dari `main` milikmu (di fork), PR ke `arvamadax/LAYAN` `main`. Satu issue per PR, deskripsi wajib memuat `Closes #<nomor issue>`.
 - Commit kecil, pesan Bahasa Indonesia. **Tanpa** baris `Co-Authored-By` atau "Generated with" dari AI.
 - Jangan commit `.env`, password, token, atau file di luar proyek.
 - Deskripsi PR berisi: apa yang berubah, file yang disentuh di luar wilayah (kalau ada) dan alasannya, asumsi,

@@ -6,8 +6,8 @@
 |---|---|
 | `api/`, `android/`, `deploy/`, `docs/`, `PLAN.md`, `DEMO.md` | Arva (backend + Android) |
 | `web/app/app/**`, `web/app/surat/**`, `components/layan/{chat,action-cards,history,letter,letter-view}.tsx`, `web/app/design-system` | Arva: PWA mahasiswa |
-| `web/app/staf/**`, `web/app/teknisi/**`, `components/layan/{staff-console,board}.tsx` | Arqia: Staff Console + Board Teknisi ([tugas](docs/tugas/arqia.md)) |
-| `web/app/page.tsx` (landing), halaman publik (`faq`, `unduh`, `status`, `keamanan`, `untuk-staf`, `untuk-teknisi`), `components/layan/{landing,student-flows,site}.tsx` | Boas: landing + halaman publik ([tugas](docs/tugas/boas.md)) |
+| `web/app/staf/**`, `web/app/teknisi/**`, `components/layan/{staff-console,board}.tsx` | Arqia: Staff Console + Board Teknisi (issue label `arqia`) |
+| `web/app/page.tsx` (landing), halaman publik (`faq`, `unduh`, `status`, `keamanan`, `untuk-staf`, `untuk-teknisi`), `components/layan/{landing,student-flows,site}.tsx` | Boas: landing + halaman publik (issue label `boas`) |
 | `primitives.tsx`, `app-bar.tsx`, `globals.css`, `lib/api.ts`, `app/layout.tsx`, `proxy.ts` | bersama: PR kecil, di-review orang lain |
 
 PWA dan App Android itu dua produk terpisah (tabel lengkapnya di `PLAN.md`). Keduanya hanya bertemu di API: `docs/API.md`.
@@ -15,8 +15,8 @@ Mengubah bentuk data dari API? Buka PR yang mengubah `api/` dan `docs/API.md` se
 
 ## Alur kerja
 
-1. Baca [`AGENTS.md`](AGENTS.md) (wajib juga untuk AI yang kamu pakai) dan `docs/tugas/<nama>.md`. Branch dari `main`: `farrel/<topik>` atau `boas/<topik>`.
-2. Commit kecil, PR ke `main`. Review oleh minimal satu orang lain; perubahan yang menyentuh kontrak API di-review Arva.
+1. Baca [`AGENTS.md`](AGENTS.md) (wajib juga untuk AI yang kamu pakai) dan issue yang ditugaskan ke kamu ([Issues](https://github.com/arvamadax/LAYAN/issues), label `arqia` / `boas`). Branch dari `main`: `farrel/<topik>` atau `boas/<topik>`.
+2. Commit kecil, satu issue per PR ke `main`, deskripsi PR wajib memuat `Closes #<nomor issue>`. Review oleh minimal satu orang lain; perubahan yang menyentuh kontrak API di-review Arva.
 3. Hanya Arva yang merge ke `main` dan deploy ke server.
 4. Repo ini **publik**: jangan commit password, `.env`, keystore, atau file dari luar proyek. Pesan commit tanpa jejak alat AI (tanpa `Co-Authored-By` AI).
 
