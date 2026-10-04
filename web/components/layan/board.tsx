@@ -1,8 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
 import { toast } from "sonner"
 import type { LucideIcon } from "lucide-react"
 import { Check, ChevronDown, CircleAlert, CircleCheck, CircleEllipsis, ListFilter, Play, Projector, Snowflake, SprayCan, TriangleAlert, Users, Wifi, X, Zap } from "lucide-react"
@@ -14,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { api, post } from "@/lib/api"
 import { TECHS, type Category, type Report, type ReportStatus, type Tech } from "@/lib/data"
 import { AccountPill, ThemeToggle, TopBar } from "./app-bar"
+import { TechTabs } from "./tech-tabs"
 import { Mark, UrgencyBadge } from "./primitives"
 import { useStore } from "./store"
 
@@ -173,34 +172,6 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
         </button>
       ))}
     </div>
-  )
-}
-
-function TechTabs() {
-  const pathname = usePathname()
-  const tabs = [
-    { label: "Board", href: "/teknisi" },
-    { label: "Rekap bulanan", href: "/teknisi/rekap" },
-  ] as const
-  return (
-    <nav aria-label="Navigasi teknisi" className="flex flex-none items-center gap-1 border-b bg-card px-4 sm:px-6">
-      {tabs.map((t) => {
-        const on = pathname === t.href
-        return (
-          <Link
-            key={t.href}
-            href={t.href}
-            aria-current={on || undefined}
-            className={cn(
-              "flex h-12 items-center px-3 text-[14px] font-semibold transition-colors",
-              on ? "text-foreground shadow-[inset_0_-2px_0_var(--primary)]" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </Link>
-        )
-      })}
-    </nav>
   )
 }
 
