@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, ArrowRight, CalendarDays, CircleAlert, Download, Inbox, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
@@ -23,8 +23,6 @@ const monthLabel = (key: string) => {
   const [y, m] = key.split("-").map(Number)
   return `${BULAN[(m ?? 1) - 1] ?? ""} ${y}`
 }
-// "2026-10-04" dari detik unix WIB untuk nama file.
-const fileDate = (key: string) => key
 const shortDate = (ts: number) => {
   const d = new Date((ts + WIB) * 1000)
   return `${d.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"][d.getUTCMonth()]}`
@@ -117,7 +115,7 @@ export function BoardRecap() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `rekap-kerusakan-${fileDate(month)}.csv`
+    a.download = `rekap-kerusakan-${month}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -139,19 +137,19 @@ export function BoardRecap() {
         </p>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-4 px-4 pb-8 pt-4 sm:px-6 print:max-w-none print:px-0 print:pt-4">
+      <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-4 px-4 pb-8 pt-4 sm:px-6 print:max-w-none print:p-[12mm]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <MonthPicker value={month} onChange={setMonth} />
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            <label className="flex h-9 cursor-pointer items-center gap-2 text-[13px] font-medium text-muted-foreground">
+            <label className="flex h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-muted-foreground">
               <input type="checkbox" checked={groupRoom} onChange={(e) => setGroupRoom(e.target.checked)} className="size-4 accent-[var(--primary)]" />
               Kelompokkan per ruang
             </label>
-            <Button variant="outline" size="sm" onClick={csv} disabled={rows.length === 0}>
+            <Button variant="outline" size="card" onClick={csv} disabled={rows.length === 0}>
               <Download />
               Unduh CSV
             </Button>
-            <Button size="sm" onClick={() => window.print()} disabled={rows.length === 0}>
+            <Button size="card" onClick={() => window.print()} disabled={rows.length === 0}>
               <Printer />
               Simpan PDF
             </Button>
@@ -190,9 +188,9 @@ export function BoardRecap() {
               <Summary label="Masih terbuka" value={open} note="baru + dikerjakan + eskalasi" />
             </div>
 
-            <section className="overflow-hidden rounded-lg border bg-card">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[880px] border-collapse text-left text-[13px]">
+            <section className="overflow-hidden rounded-lg border bg-card print:overflow-visible print:rounded-none print:border-0">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full min-w-[880px] border-collapse text-left text-[13px] print:min-w-0 print:text-xs">
                   <caption className="sr-only">{title}</caption>
                   <thead>
                     <tr className="border-b bg-muted/60 text-xs text-muted-foreground">
@@ -206,8 +204,8 @@ export function BoardRecap() {
                   {groupRoom ? (
                     <tbody>
                       {rooms.map(([room, list]) => (
-                        <>
-                          <tr key={room} className="border-b bg-muted/40">
+                        <Fragment key={room}>
+                          <tr className="border-b bg-muted/40">
                             <th scope="rowgroup" colSpan={8} className="px-3 py-2 font-mono text-[13px] font-bold">
                               {room} <span className="font-sans font-medium text-muted-foreground">· {list.length} laporan</span>
                             </th>
@@ -215,7 +213,7 @@ export function BoardRecap() {
                           {list.map((r) => (
                             <Row key={r.id} r={r} />
                           ))}
-                        </>
+                        </Fragment>
                       ))}
                     </tbody>
                   ) : (
