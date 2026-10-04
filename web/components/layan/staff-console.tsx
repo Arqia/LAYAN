@@ -45,7 +45,7 @@ type Tab = (typeof TABS)[number][0]
 
 const hours = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1).replace(".", ",")} jam` : `${m} mnt`)
 
-function StaffTabs() {
+export function StaffTabs() {
   const pathname = usePathname()
   const tabs = [
     { label: "Antrean", href: "/staf" },
@@ -180,7 +180,7 @@ function Detail({ item, busy, onApprove, onReject, onReply, onBack }: { item: Qu
           {item.letter && (
             <section className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold">Preview draft surat</h3>
+                <h3 className="text-sm font-bold">Pratinjau draft surat</h3>
                 <a href={`/surat/${item.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:text-primary-hover">
                   <Maximize2 className="size-3.5" />
                   Buka PDF
@@ -195,7 +195,7 @@ function Detail({ item, busy, onApprove, onReject, onReply, onBack }: { item: Qu
 
         <aside className="flex flex-col gap-4 overflow-auto border-t bg-panel p-6 lg:border-l lg:border-t-0">
           <div className="flex flex-col gap-0.5">
-            <h3 className="text-sm font-bold">Timeline aksi agent</h3>
+            <h3 className="text-sm font-bold">Linimasa aksi agent</h3>
             <span className="text-xs text-muted-foreground">{item.timeline.length} aksi · tercatat di audit log</span>
           </div>
           <ol className="flex flex-col">
@@ -255,6 +255,7 @@ export function StaffConsole() {
   const [loadError, setLoadError] = useState("")
   const [tab, setTab] = useState<Tab>("semua")
   const [q, setQ] = useState("")
+  const [oldestFirst, setOldestFirst] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
   const [dialog, setDialog] = useState<"reject" | "reply" | null>(null)
   const [reason, setReason] = useState("")
@@ -285,7 +286,7 @@ export function StaffConsole() {
   const visible = live
     .filter((x) => tab === "semua" || x.tab === tab)
     .filter((x) => !needle || x.name.toLowerCase().includes(needle) || (x.nim ?? "").toLowerCase().includes(needle))
-    .sort((a, b) => b.mins - a.mins)
+    .sort((a, b) => (oldestFirst ? b.mins - a.mins : a.mins - b.mins))
   const cur = visible.find((x) => x.id === selected) ?? visible[0]
   const first = cur?.name.split(" ")[0] ?? "mahasiswa"
   const counts = { semua: live.length, surat: 0, tiket: 0, booking: 0 }
@@ -359,10 +360,17 @@ export function StaffConsole() {
           >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold">Antrean persetujuan</h2>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setOldestFirst((v) => !v)}
+                aria-pressed={oldestFirst}
+                aria-label={oldestFirst ? "Urutkan: terbaru dulu" : "Urutkan: terlama dulu"}
+                title={oldestFirst ? "Urutkan: terbaru dulu" : "Urutkan: terlama dulu"}
+                className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
                 <ArrowDownWideNarrow className="size-3.5" />
-                Terlama
-              </span>
+                {oldestFirst ? "Terlama" : "Terbaru"}
+              </button>
             </div>
             <TabsList variant="line" className="h-auto gap-1 p-0">
               {TABS.map(([k, label]) => (
@@ -431,7 +439,7 @@ export function StaffConsole() {
                 <span className="grid size-12 place-items-center rounded-lg bg-accent text-primary">
                   <Inbox className="size-6" />
                 </span>
-                <span className="text-base font-bold">{needle ? "Tidak ada hasil" : "Queue bersih"}</span>
+                <span className="text-base font-bold">{needle ? "Tidak ada hasil" : "Antrean kosong"}</span>
                 <span className="max-w-[260px] text-pretty text-[13px] leading-[19px] text-muted-foreground">
                   {needle ? `Tidak ada yang cocok dengan “${q.trim()}”. Coba nama atau NIM lain.` : "Semua permintaan sudah diputuskan. Item baru dari agent akan muncul di sini."}
                 </span>
@@ -479,7 +487,7 @@ export function StaffConsole() {
           <div className="flex flex-col gap-3 px-6 py-[18px]">
             <div className={cn("flex flex-wrap gap-1.5", dialog === "reply" && "hidden")}>
               {chips.map((c) => (
-                <button key={c.label} type="button" onClick={() => setReason(c.text)} className="inline-flex h-[30px] cursor-pointer items-center rounded-full border border-input px-3 text-[13px] font-medium hover:bg-muted">
+                <button key={c.label} type="button" onClick={() => setReason(c.text)} className="inline-flex h-11 cursor-pointer items-center rounded-full border border-input px-3 text-[13px] font-medium hover:bg-muted">
                   {c.label}
                 </button>
               ))}
