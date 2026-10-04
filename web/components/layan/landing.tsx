@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { HOME } from "@/lib/data"
 import { useStore } from "@/components/layan/store"
 import { Logo, SiteFooter, setLang, useLang, type Lang } from "@/components/layan/site"
+import { ThemeToggle } from "@/components/layan/app-bar"
 import Link from "next/link"
 import { StudentFlows } from "@/components/layan/student-flows"
 
@@ -801,6 +802,7 @@ export function Landing() {
               {t.motionLabel}
               <SwitchTrack on={motion === "on"} />
             </button>
+            <ThemeToggle />
             <div role="group" aria-label={t.langLabel} className="flex rounded-full border bg-card/60 p-1">
               {(["id", "en"] as const).map((l) => (
                 <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l} className={`h-9 min-w-11 cursor-pointer rounded-full px-3 font-mono text-xs font-medium uppercase tracking-[.06em] transition-colors duration-300 ${lang === l ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground"}`}>

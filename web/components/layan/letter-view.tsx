@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, CircleAlert, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
+import { ThemeToggle } from "./app-bar"
 import { LetterPaper, type LetterBody, type Student } from "./letter"
 import { StatusBadge } from "./primitives"
 import type { Status } from "@/lib/data"
@@ -32,6 +33,7 @@ export function LetterView({ id }: { id: string }) {
           <Printer />
           Simpan PDF
         </Button>
+        <ThemeToggle />
       </div>
       {error && (
         <p role="alert" className="flex items-center gap-2 text-sm text-destructive">

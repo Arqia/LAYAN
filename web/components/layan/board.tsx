@@ -149,7 +149,7 @@ export function Board() {
     <>
       {/* ---------- desktop ---------- */}
       <div className="hidden h-screen min-h-[720px] flex-col lg:flex">
-        <TopBar section="Board Teknisi" />
+        <TopBar section="Board Teknisi" themeToggle />
         <div className="flex flex-none items-center gap-4 px-6 pb-4 pt-5">
           <div className="flex flex-1 flex-col gap-0.5">
             <h1 className="text-[22px] font-bold tracking-[-0.01em]">Laporan kerusakan</h1>
