@@ -69,7 +69,7 @@ export function StafView() {
     <SitePage lang={lang} kicker={t.kicker} title={t.title} sub={t.sub}>
       <Block title={t.cmpTitle}>
         <div className="overflow-hidden rounded-[24px] border bg-card">
-          <div className="hidden grid-cols-[.8fr_1fr_1fr] gap-6 border-b bg-panel px-6 py-3 font-mono text-[11px] uppercase tracking-[.08em] text-subtle-foreground md:grid">
+          <div className="hidden grid-cols-[.8fr_1fr_1fr] gap-6 border-b bg-panel px-6 py-3 text-[11px] font-semibold uppercase tracking-[.08em] text-subtle-foreground md:grid">
             {t.cmpHead.map((h) => <span key={h}>{h}</span>)}
           </div>
           {t.cmp.map(([svc, before, after]) => (

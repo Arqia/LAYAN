@@ -90,11 +90,11 @@ export function UnduhView() {
               prompt && <button type="button" onClick={install} className={`${BTN_DARK} self-start`}>{t.install}</button>
             )}
             <div className="flex flex-col gap-3">
-              <span className="font-mono text-[11px] uppercase tracking-[.08em] text-subtle-foreground">{t.manual}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[.08em] text-subtle-foreground">{t.manual}</span>
               <ol className="m-0 grid list-none gap-3 p-0 md:grid-cols-3">
                 {t.steps.map(([device, how], i) => (
                   <li key={device} className="flex flex-col gap-2 rounded-[20px] border bg-card p-5">
-                    <span className="font-mono text-xs text-primary">0{i + 1}</span>
+                    <span className="text-xs font-semibold text-primary">0{i + 1}</span>
                     <span className="text-[16px] font-semibold">{device}</span>
                     <span className="text-[14.5px] leading-relaxed text-muted-foreground">{how}</span>
                   </li>
@@ -115,7 +115,7 @@ export function UnduhView() {
           </figure>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <span className="font-mono text-[11px] uppercase tracking-[.08em] text-subtle-foreground">{t.latest}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[.08em] text-subtle-foreground">{t.latest}</span>
               {release === undefined ? (
                 <span className="text-[15px] text-muted-foreground">{t.checking}</span>
               ) : release ? (
